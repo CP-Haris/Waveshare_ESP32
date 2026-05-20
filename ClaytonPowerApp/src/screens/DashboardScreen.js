@@ -16,6 +16,10 @@ import SocRing from '../components/SocRing';
 const DEV_LPS = 1;
 const DEV_BMS = 2;
 
+const FAIL_LABELS = {
+  4: 'Blocked by error',
+};
+
 function finiteNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
@@ -49,7 +53,7 @@ function unitTypeLabel(dashboard) {
 }
 
 function stateLabel(state, failCode) {
-  if (failCode > 0) return `Fail ${failCode}`;
+  if (failCode > 0) return FAIL_LABELS[failCode] || `Failure ${failCode}`;
   switch (state) {
     case -1: return 'Error';
     case 0: return 'Off';

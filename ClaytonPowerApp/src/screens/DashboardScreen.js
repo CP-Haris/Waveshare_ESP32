@@ -7,7 +7,7 @@ import {
   Switch,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, fontSize, radius } from '../utils/theme';
+import { colors, spacing, fontSize } from '../utils/theme';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
 import ScreenHeader from '../components/ScreenHeader';
@@ -175,7 +175,7 @@ export default function DashboardScreen() {
   const acInPowerText = formatPower(dashboard.acInPower);
   const acOutPowerText = formatPower(dashboard.acOutPower);
   const chargeMode = dashboard.batteryCurrent >= 0 ? 'Charging' : 'Discharging';
-  const healthText = statusOk ? 'Healthy' : `${dashboard.errorCount} errors`;
+  const healthText = statusOk ? 'Healthy' : 'Attention';
 
   const systemIndicators = [
     { key: 'inverter', label: 'Inverter', icon: 'flash-on', color: colors.accent, active: dashboard.inverterState >= 1 && dashboard.inverterFail === 0, stateLabel: stateLabel(dashboard.inverterState, dashboard.inverterFail) },
@@ -255,39 +255,6 @@ export default function DashboardScreen() {
         </View>
         <View style={styles.systemList}>
           {systemIndicators.map((item) => <SystemStatusItem key={item.key} item={item} />)}
-        </View>
-      </View>
-
-      <View style={[styles.alertPanel, statusOk ? styles.alertPanelOk : styles.alertPanelError]}>
-        <MaterialIcons
-          name={statusOk ? 'verified' : 'error-outline'}
-          size={24}
-          color={statusOk ? colors.green : colors.red}
-        />
-        <View style={styles.alertCopy}>
-          <Text style={styles.alertTitle}>{dashboard.errorCount} Active Errors</Text>
-          <Text style={styles.alertSub}>
-            {dashboard.errorCount > 0 ? dashboard.errorCodes.map((code) => `#${code}`).join(', ') : 'System operating normally'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.temperaturePanel}>
-        <View style={styles.panelHeaderRow}>
-          <Text style={styles.sectionTitle}>Temperature</Text>
-          <MaterialIcons name="device-thermostat" size={18} color={colors.textMuted} />
-        </View>
-        <View style={styles.tempRow}>
-          {dashboard.temps.map((temperature, index) => (
-            <View key={index} style={styles.tempItem}>
-              <Text style={styles.tempLabel}>T{index + 1}</Text>
-              <Text style={styles.tempValue}>{formatFixed(temperature, 1)} C</Text>
-            </View>
-          ))}
-          <View style={styles.tempItem}>
-            <Text style={styles.tempLabel}>Cell</Text>
-            <Text style={styles.tempValue}>{formatFixed(dashboard.tempCellAvg, 1)} C</Text>
-          </View>
         </View>
       </View>
 
@@ -391,17 +358,4 @@ const styles = StyleSheet.create({
   systemCopy: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
   systemLabel: { color: colors.text, fontSize: fontSize.sm, fontWeight: '700' },
   systemState: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: '700' },
-
-  alertPanel: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: 8, borderWidth: 1, padding: spacing.md, marginBottom: spacing.sm },
-  alertPanelOk: { backgroundColor: colors.greenDeep, borderColor: colors.greenBorder },
-  alertPanelError: { backgroundColor: colors.redDeep, borderColor: colors.redBg },
-  alertCopy: { flex: 1 },
-  alertTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800' },
-  alertSub: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
-
-  temperaturePanel: { backgroundColor: colors.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm },
-  tempRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  tempItem: { flex: 1, minHeight: 52, borderRadius: 8, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderSubtle },
-  tempLabel: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '800' },
-  tempValue: { color: colors.text, fontSize: fontSize.sm, fontWeight: '800', marginTop: 3 },
 });

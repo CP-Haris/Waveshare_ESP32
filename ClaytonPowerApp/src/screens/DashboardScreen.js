@@ -13,6 +13,9 @@ import canGatewayService from '../services/canGatewayService';
 import ScreenHeader from '../components/ScreenHeader';
 import SocRing from '../components/SocRing';
 
+const DEV_LPS = 1;
+const DEV_BMS = 2;
+
 function finiteNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
@@ -30,9 +33,18 @@ function formatFixed(value, decimals) {
   return finiteNumber(value).toFixed(decimals);
 }
 
-function unitTypeLabel(unitType) {
-  if (unitType === 1) return 'LPS';
-  if (unitType === 2) return 'BMS';
+function productFamily(dashboard) {
+  const partNumber = String(dashboard.partNumber || '').toUpperCase();
+  if (partNumber.startsWith('CB')) return 'battery';
+  if (partNumber.startsWith('CL')) return 'lps';
+  if (dashboard.unitType === DEV_BMS) return 'battery';
+  return 'lps';
+}
+
+function unitTypeLabel(dashboard) {
+  const family = productFamily(dashboard);
+  if (family === 'battery') return 'Battery';
+  if (dashboard.unitType === DEV_LPS || family === 'lps') return 'LPS';
   return 'CAN Unit';
 }
 
@@ -49,19 +61,27 @@ function stateLabel(state, failCode) {
   }
 }
 
-function MetricTile({ icon, label, value, unit, detail, accentColor = colors.accent }) {
+function SystemMetricCard({ icon, label, value, unit, detail, active, fail, stateText, accentColor = colors.accent, wide = false }) {
+  const stateColor = fail ? colors.red : active ? accentColor : colors.textMuted;
+
   return (
-    <View style={styles.metricTile}>
-      <View style={styles.metricTopRow}>
-        <View style={[styles.metricIcon, { borderColor: accentColor }]}>
+    <View style={[styles.systemMetricCard, wide && styles.systemMetricCardWide]}>
+      <View style={styles.systemMetricTopRow}>
+        <View style={[styles.systemMetricIcon, { borderColor: accentColor }]}>
           <MaterialIcons name={icon} size={18} color={accentColor} />
         </View>
-        <Text style={styles.metricLabel}>{label}</Text>
+        <View style={styles.systemMetricHeaderCopy}>
+          <Text style={styles.systemMetricLabel}>{label}</Text>
+          <View style={styles.systemMetricStateRow}>
+            <View style={[styles.systemDot, { backgroundColor: stateColor }]} />
+            <Text style={[styles.systemMetricState, { color: stateColor }]}>{stateText}</Text>
+          </View>
+        </View>
       </View>
-      <Text style={styles.metricValue}>
-        {value} <Text style={styles.metricUnit}>{unit}</Text>
+      <Text style={styles.systemMetricValue}>
+        {value} <Text style={styles.systemMetricUnit}>{unit}</Text>
       </Text>
-      {!!detail && <Text style={styles.metricDetail}>{detail}</Text>}
+      {!!detail && <Text style={styles.systemMetricDetail}>{detail}</Text>}
     </View>
   );
 }
@@ -84,19 +104,6 @@ function ToggleControl({ icon, label, value, onValueChange }) {
         trackColor={{ false: colors.borderInput, true: colors.greenBg }}
         thumbColor={value ? colors.green : colors.textMuted}
       />
-    </View>
-  );
-}
-
-function SystemStatusItem({ item }) {
-  return (
-    <View style={styles.systemItem}>
-      <View style={[styles.systemDot, { backgroundColor: item.active ? item.color : colors.bgInset }]} />
-      <MaterialIcons name={item.icon} size={18} color={item.active ? item.color : colors.textMuted} />
-      <View style={styles.systemCopy}>
-        <Text style={styles.systemLabel}>{item.label}</Text>
-        <Text style={[styles.systemState, item.active && { color: item.color }]}>{item.stateLabel}</Text>
-      </View>
     </View>
   );
 }
@@ -159,6 +166,8 @@ export default function DashboardScreen() {
   }
 
   const dashboard = data;
+  const family = productFamily(dashboard);
+  const isBatteryProduct = family === 'battery';
   const pct = Math.max(0, Math.min(100, dashboard.soc));
   const timeStr = dashboard.socTimeMin > 0
     ? `${Math.floor(dashboard.socTimeMin / 60)}h ${String(dashboard.socTimeMin % 60).padStart(2, '0')}m`
@@ -177,12 +186,82 @@ export default function DashboardScreen() {
   const chargeMode = dashboard.batteryCurrent >= 0 ? 'Charging' : 'Discharging';
   const healthText = statusOk ? 'Healthy' : 'Attention';
 
-  const systemIndicators = [
-    { key: 'inverter', label: 'Inverter', icon: 'flash-on', color: colors.accent, active: dashboard.inverterState >= 1 && dashboard.inverterFail === 0, stateLabel: stateLabel(dashboard.inverterState, dashboard.inverterFail) },
-    { key: 'charger', label: 'Charger', icon: 'ev-station', color: colors.green, active: dashboard.chargerState >= 1 && dashboard.chargerFail === 0, stateLabel: stateLabel(dashboard.chargerState, dashboard.chargerFail) },
-    { key: 'Solar', label: 'Solar', icon: 'wb-sunny', color: colors.solar, active: dashboard.solarState >= 1 && dashboard.solarFail === 0, stateLabel: stateLabel(dashboard.solarState, dashboard.solarFail) },
-    { key: 'dcin', label: 'DC input', icon: 'input', color: colors.accent, active: dashboard.dcInState >= 1 && dashboard.dcInFail === 0, stateLabel: stateLabel(dashboard.dcInState, dashboard.dcInFail) },
-    { key: 'dcout', label: 'DC output', icon: 'output', color: colors.green, active: dashboard.dcOutState >= 1 && dashboard.dcOutFail === 0, stateLabel: stateLabel(dashboard.dcOutState, dashboard.dcOutFail) },
+  const batteryCard = {
+    key: 'battery',
+    label: 'Battery',
+    icon: 'battery-full',
+    value: batteryPowerText.value,
+    unit: batteryPowerText.unit,
+    detail: `${formatFixed(dashboard.batteryVoltage, 1)} V | ${formatFixed(dashboard.batteryCurrent, 1)} A`,
+    active: statusOk,
+    fail: !statusOk,
+    stateText: statusOk ? chargeMode : 'Attention',
+    accentColor: dashboard.batteryCurrent >= 0 ? colors.green : colors.orange,
+    wide: true,
+  };
+
+  const systemCards = isBatteryProduct ? [batteryCard] : [
+    {
+      key: 'dcout',
+      label: 'DC Output',
+      icon: 'output',
+      value: dcOutPowerText.value,
+      unit: dcOutPowerText.unit,
+      detail: `${formatFixed(dashboard.dcOutVoltage, 2)} V | ${formatFixed(dashboard.dcOutCurrent, 1)} A`,
+      active: dashboard.dcOutState >= 1 && dashboard.dcOutFail === 0,
+      fail: dashboard.dcOutFail > 0,
+      stateText: stateLabel(dashboard.dcOutState, dashboard.dcOutFail),
+      accentColor: colors.green,
+    },
+    {
+      key: 'dcin',
+      label: 'DC Input',
+      icon: 'input',
+      value: dcInPowerText.value,
+      unit: dcInPowerText.unit,
+      detail: `${formatFixed(dashboard.dcInVoltage, 2)} V | ${formatFixed(dashboard.dcInCurrent, 1)} A`,
+      active: dashboard.dcInState >= 1 && dashboard.dcInFail === 0,
+      fail: dashboard.dcInFail > 0,
+      stateText: stateLabel(dashboard.dcInState, dashboard.dcInFail),
+      accentColor: colors.accent,
+    },
+    {
+      key: 'inverter',
+      label: 'Inverter',
+      icon: 'flash-on',
+      value: acOutPowerText.value,
+      unit: acOutPowerText.unit,
+      detail: `${formatFixed(dashboard.acOutVoltage, 1)} V | ${formatFixed(dashboard.acOutCurrent, 2)} A`,
+      active: dashboard.inverterState >= 1 && dashboard.inverterFail === 0,
+      fail: dashboard.inverterFail > 0,
+      stateText: stateLabel(dashboard.inverterState, dashboard.inverterFail),
+      accentColor: colors.accent,
+    },
+    {
+      key: 'charger',
+      label: 'Charger',
+      icon: 'ev-station',
+      value: acInPowerText.value,
+      unit: acInPowerText.unit,
+      detail: `${formatFixed(dashboard.acInVoltage, 1)} V | ${formatFixed(dashboard.acInCurrent, 2)} A`,
+      active: dashboard.chargerState >= 1 && dashboard.chargerFail === 0,
+      fail: dashboard.chargerFail > 0,
+      stateText: stateLabel(dashboard.chargerState, dashboard.chargerFail),
+      accentColor: colors.green,
+    },
+    {
+      key: 'solar',
+      label: 'Solar',
+      icon: 'wb-sunny',
+      value: formatFixed(dashboard.solarCurrent, 1),
+      unit: 'A',
+      detail: 'Solar charge current',
+      active: dashboard.solarState >= 1 && dashboard.solarFail === 0,
+      fail: dashboard.solarFail > 0,
+      stateText: stateLabel(dashboard.solarState, dashboard.solarFail),
+      accentColor: colors.solar,
+      wide: true,
+    },
   ];
 
   return (
@@ -192,7 +271,7 @@ export default function DashboardScreen() {
       <View style={[styles.heroPanel, statusOk ? styles.heroPanelOk : styles.heroPanelAlert]}>
         <View style={styles.heroTopRow}>
           <View>
-            <Text style={styles.overline}>{unitTypeLabel(dashboard.unitType)}</Text>
+            <Text style={styles.overline}>{unitTypeLabel(dashboard)}</Text>
             <Text style={styles.heroTitle}>{chargeMode}</Text>
             <Text style={styles.heroSubtitle}>{statusOk ? 'System stable' : 'Attention required'}</Text>
           </View>
@@ -231,30 +310,37 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      <View style={styles.controlRow}>
-        <ToggleControl icon="power" label="Inverter" value={inverterOn} onValueChange={() => canGatewayService.toggleFunc(0)} />
-        <ToggleControl icon="electrical-services" label="DC output" value={dcOutOn} onValueChange={() => canGatewayService.toggleFunc(1)} />
-      </View>
-
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Energy flow</Text>
-        <Text style={styles.sectionMeta}>Live</Text>
-      </View>
-
-      <View style={styles.metricGrid}>
-        <MetricTile icon="battery-full" label="Battery" value={batteryPowerText.value} unit={batteryPowerText.unit} detail={`${formatFixed(dashboard.batteryVoltage, 1)} V | ${formatFixed(dashboard.batteryCurrent, 1)} A`} accentColor={dashboard.batteryCurrent >= 0 ? colors.green : colors.orange} />
-        <MetricTile icon="output" label="DC output" value={dcOutPowerText.value} unit={dcOutPowerText.unit} detail={`${formatFixed(dashboard.dcOutVoltage, 2)} V | ${formatFixed(dashboard.dcOutCurrent, 1)} A`} accentColor={colors.accent} />
-        <MetricTile icon="input" label="DC input" value={dcInPowerText.value} unit={dcInPowerText.unit} detail={`${formatFixed(dashboard.dcInVoltage, 2)} V | ${formatFixed(dashboard.dcInCurrent, 1)} A`} accentColor={colors.green} />
-        <MetricTile icon="bolt" label="AC input" value={acInPowerText.value} unit={acInPowerText.unit} detail={`AC out ${acOutPowerText.value} ${acOutPowerText.unit}`} accentColor={colors.solar} />
-      </View>
-
-      <View style={styles.sectionPanel}>
-        <View style={styles.panelHeaderRow}>
-          <Text style={styles.sectionTitle}>System state</Text>
-          <MaterialIcons name="memory" size={18} color={colors.textMuted} />
+      {!isBatteryProduct && (
+        <View style={styles.controlRow}>
+          <ToggleControl icon="power" label="Inverter" value={inverterOn} onValueChange={() => canGatewayService.toggleFunc(0)} />
+          <ToggleControl icon="electrical-services" label="DC output" value={dcOutOn} onValueChange={() => canGatewayService.toggleFunc(1)} />
         </View>
-        <View style={styles.systemList}>
-          {systemIndicators.map((item) => <SystemStatusItem key={item.key} item={item} />)}
+      )}
+
+      <View style={styles.systemsPanel}>
+        <View style={styles.panelHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Systems</Text>
+            <Text style={styles.sectionMeta}>{isBatteryProduct ? 'Battery unit' : 'LPS functions'}</Text>
+          </View>
+          <MaterialIcons name={isBatteryProduct ? 'battery-full' : 'memory'} size={18} color={colors.textMuted} />
+        </View>
+        <View style={styles.systemsGrid}>
+          {systemCards.map((item) => (
+            <SystemMetricCard
+              key={item.key}
+              icon={item.icon}
+              label={item.label}
+              value={item.value}
+              unit={item.unit}
+              detail={item.detail}
+              active={item.active}
+              fail={item.fail}
+              stateText={item.stateText}
+              accentColor={item.accentColor}
+              wide={item.wide}
+            />
+          ))}
         </View>
       </View>
 
@@ -321,29 +407,10 @@ const styles = StyleSheet.create({
   controlState: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2, fontWeight: '700' },
   controlStateActive: { color: colors.green },
 
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   sectionTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800' },
   sectionMeta: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700' },
 
-  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: spacing.sm },
-  metricTile: {
-    width: '48.5%',
-    minHeight: 116,
-    backgroundColor: colors.bgElevated,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  metricTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  metricIcon: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard },
-  metricLabel: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '800', flex: 1 },
-  metricValue: { color: colors.text, fontSize: 24, fontWeight: '800', lineHeight: 30 },
-  metricUnit: { fontSize: 13, color: colors.textMuted, fontWeight: '700' },
-  metricDetail: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 4, fontWeight: '700' },
-
-  sectionPanel: {
+  systemsPanel: {
     backgroundColor: colors.bgElevated,
     borderRadius: 8,
     borderWidth: 1,
@@ -352,10 +419,26 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  systemList: { gap: spacing.sm },
-  systemItem: { flexDirection: 'row', alignItems: 'center', minHeight: 42, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, paddingBottom: spacing.sm, gap: spacing.sm },
+  systemsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  systemMetricCard: {
+    width: '48.5%',
+    minHeight: 122,
+    backgroundColor: colors.bgCard,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  systemMetricCardWide: { width: '100%' },
+  systemMetricTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  systemMetricIcon: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
+  systemMetricHeaderCopy: { flex: 1, minWidth: 0 },
+  systemMetricLabel: { color: colors.text, fontSize: fontSize.sm, fontWeight: '800' },
+  systemMetricStateRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   systemDot: { width: 8, height: 8, borderRadius: 4 },
-  systemCopy: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
-  systemLabel: { color: colors.text, fontSize: fontSize.sm, fontWeight: '700' },
-  systemState: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: '700' },
+  systemMetricState: { fontSize: fontSize.xs, fontWeight: '800' },
+  systemMetricValue: { color: colors.text, fontSize: 24, fontWeight: '800', lineHeight: 30 },
+  systemMetricUnit: { fontSize: 13, color: colors.textMuted, fontWeight: '700' },
+  systemMetricDetail: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 4, fontWeight: '700' },
 });

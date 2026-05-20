@@ -113,6 +113,8 @@ function snapshotDashboard(unit) {
   return {
     ...data,
     unitType: unit.type,
+    partNumber: unit.partNumber,
+    serial: unit.serial,
     cellVoltage: [...data.cellVoltage],
     temps: [...data.temps],
     errorCodes: [...data.errorCodes],
@@ -503,8 +505,8 @@ class CanGatewayService {
 
   _classifyUnit(unit) {
     const partNumber = String(unit.partNumber || '').toUpperCase();
-    if (partNumber.startsWith('CL2')) unit.type = DEV_LPS;
-    else if (partNumber.startsWith('CB2')) unit.type = DEV_BMS;
+    if (partNumber.startsWith('CL')) unit.type = DEV_LPS;
+    else if (partNumber.startsWith('CB')) unit.type = DEV_BMS;
     else unit.type = DEV_UNKNOWN;
     unit.data.unitType = unit.type;
   }

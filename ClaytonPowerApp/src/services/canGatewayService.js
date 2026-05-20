@@ -16,6 +16,10 @@ const FUNC_BLOCK = 0;
 const FUNC_INVERTER_ID = 158;
 const FUNC_DCOUT_ID = 159;
 
+const ERROR_CLEAR_BLOCK = 1;
+const ERROR_CLEAR_ID = 252;
+const ERROR_CLEAR_VALUE = 1234;
+
 const DEV_UNKNOWN = 0;
 const DEV_LPS = 1;
 const DEV_BMS = 2;
@@ -210,6 +214,10 @@ class CanGatewayService {
   requestErrors() {
     const activeUnit = this._getActiveUnit();
     this._emit('errors', activeUnit ? [...activeUnit.data.errorCodes] : []);
+  }
+
+  async clearErrors() {
+    return this._sendCanExtra(CAN_CMD_SET_VAL, ERROR_CLEAR_BLOCK, ERROR_CLEAR_ID, ERROR_CLEAR_VALUE);
   }
 
   selectUnit(index) {

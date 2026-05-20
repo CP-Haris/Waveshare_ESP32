@@ -20,6 +20,8 @@ Dashboard data is decoded from normal Clayton/J1939 CAN broadcasts:
 - LPS frames use `0x18FF/0x19FF/0x14FF` with the message byte in bits 8-15.
 - BMS frames use the same broadcast pattern with a BMS-specific field layout.
 - Failure codes are read from broadcast message `0x05` and exposed to both Dashboard and Settings.
+- The Dashboard maps active failure codes through the same error table used by the ESP32 display.
+- Clearing errors uses CAN_Extra `SET_VAL` on block `1`, id `252`, value `1234`.
 
 The app keeps the selected unit locally. Selecting a unit does not send a BLE command to the ESP32.
 
@@ -29,8 +31,8 @@ Units are discovered from source addresses seen on CAN frames. The app requests 
 
 Part numbers classify units:
 
-- `CL2...` is treated as LPS.
-- `CB2...` is treated as BMS.
+- `CL...` is treated as LPS.
+- `CB...` is treated as BMS.
 
 ## Settings
 

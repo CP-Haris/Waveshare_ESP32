@@ -5,9 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
+  Modal,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, fontSize } from '../utils/theme';
+import { ERROR_LEVEL, activeErrorDefinitions } from '../utils/errorCodes';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
 import ScreenHeader from '../components/ScreenHeader';
@@ -65,6 +69,12 @@ function stateLabel(state, failCode) {
   }
 }
 
+function errorLevelColor(level) {
+  if (level === ERROR_LEVEL.WARNING) return colors.solar;
+  if (level === ERROR_LEVEL.FAILURE || level === ERROR_LEVEL.CRITICAL) return colors.red;
+  return colors.textMuted;
+}
+
 function SystemMetricCard({ icon, label, value, unit, detail, active, fail, stateText, accentColor = colors.accent, wide = false }) {
   const stateColor = fail ? colors.red : active ? accentColor : colors.textMuted;
 
@@ -115,6 +125,9 @@ function ToggleControl({ icon, label, value, onValueChange }) {
 export default function DashboardScreen() {
   const [data, setData] = useState(null);
   const [connected, setConnected] = useState(bleService.isConnected);
+  const [errorOverviewVisible, setErrorOverviewVisible] = useState(false);
+  const [clearingErrors, setClearingErrors] = useState(false);
+  const [clearStatus, setClearStatus] = useState('');
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -189,6 +202,31 @@ export default function DashboardScreen() {
   const acOutPowerText = formatPower(dashboard.acOutPower);
   const chargeMode = dashboard.batteryCurrent >= 0 ? 'Charging' : 'Discharging';
   const healthText = statusOk ? 'Healthy' : 'Attention';
+  const errorDefinitions = activeErrorDefinitions(dashboard.errorCodes);
+  const errorCountLabel = errorDefinitions.length === 1 ? '1 active error' : `${errorDefinitions.length} active errors`;
+
+  const openErrorOverview = () => {
+    setClearStatus('');
+    setErrorOverviewVisible(true);
+  };
+
+  const handleClearErrors = async () => {
+    if (clearingErrors || errorDefinitions.length === 0) return;
+    setClearingErrors(true);
+    setClearStatus('');
+    try {
+      const ok = await canGatewayService.clearErrors();
+      setClearStatus(ok ? 'Clear command sent' : 'Unable to send clear command');
+      if (ok) {
+        canGatewayService.requestErrors();
+        canGatewayService.requestDashboard();
+      }
+    } catch (error) {
+      setClearStatus('Unable to send clear command');
+    } finally {
+      setClearingErrors(false);
+    }
+  };
 
   const batteryCard = {
     key: 'battery',
@@ -279,14 +317,18 @@ export default function DashboardScreen() {
             <Text style={styles.heroTitle}>{chargeMode}</Text>
             <Text style={styles.heroSubtitle}>{statusOk ? 'System stable' : 'Attention required'}</Text>
           </View>
-          <View style={[styles.healthPill, statusOk ? styles.healthPillOk : styles.healthPillAlert]}>
+          <TouchableOpacity
+            style={[styles.healthPill, statusOk ? styles.healthPillOk : styles.healthPillAlert]}
+            onPress={openErrorOverview}
+            activeOpacity={0.85}
+          >
             <MaterialIcons
               name={statusOk ? 'check-circle' : 'error-outline'}
               size={16}
               color={statusOk ? colors.green : colors.red}
             />
             <Text style={[styles.healthText, statusOk ? styles.healthTextOk : styles.healthTextAlert]}>{healthText}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.heroBody}>
@@ -347,6 +389,68 @@ export default function DashboardScreen() {
           ))}
         </View>
       </View>
+
+      <Modal
+        visible={errorOverviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorOverviewVisible(false)}
+      >
+        <View style={styles.errorModalBackdrop}>
+          <View style={styles.errorSheet}>
+            <View style={styles.errorSheetHeader}>
+              <View>
+                <Text style={styles.errorSheetTitle}>Errors</Text>
+                <Text style={[styles.errorSheetMeta, statusOk ? styles.errorSheetMetaOk : styles.errorSheetMetaAlert]}>
+                  {statusOk ? 'No active errors' : errorCountLabel}
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setErrorOverviewVisible(false)} activeOpacity={0.85}>
+                <MaterialIcons name="close" size={22} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.errorList} contentContainerStyle={styles.errorListContent}>
+              {errorDefinitions.length === 0 ? (
+                <View style={styles.noErrorPanel}>
+                  <MaterialIcons name="check-circle" size={28} color={colors.green} />
+                  <Text style={styles.noErrorTitle}>No active errors</Text>
+                </View>
+              ) : errorDefinitions.map((definition) => {
+                const levelColor = errorLevelColor(definition.level);
+                return (
+                  <View key={definition.code} style={[styles.errorItem, { borderColor: levelColor }]}>
+                    <View style={styles.errorItemHeader}>
+                      <View style={[styles.errorDot, { backgroundColor: levelColor }]} />
+                      <Text style={styles.errorItemTitle}>{definition.title}</Text>
+                      <View style={[styles.errorLevelPill, { borderColor: levelColor }]}>
+                        <Text style={[styles.errorLevelText, { color: levelColor }]}>{definition.level}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.errorDescription}>{definition.description}</Text>
+                    <Text style={styles.errorCodeText}>Error code: {definition.code}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {!!clearStatus && <Text style={styles.clearStatus}>{clearStatus}</Text>}
+            <TouchableOpacity
+              style={[styles.clearButton, errorDefinitions.length === 0 && styles.clearButtonDisabled]}
+              onPress={handleClearErrors}
+              disabled={clearingErrors || errorDefinitions.length === 0}
+              activeOpacity={0.85}
+            >
+              {clearingErrors ? (
+                <ActivityIndicator size="small" color={colors.text} />
+              ) : (
+                <MaterialIcons name="delete-outline" size={18} color={colors.text} />
+              )}
+              <Text style={styles.clearButtonText}>Clear errors</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <View style={{ height: spacing.lg }} />
     </ScrollView>
@@ -445,4 +549,47 @@ const styles = StyleSheet.create({
   systemMetricValue: { color: colors.text, fontSize: 24, fontWeight: '800', lineHeight: 30 },
   systemMetricUnit: { fontSize: 13, color: colors.textMuted, fontWeight: '700' },
   systemMetricDetail: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 4, fontWeight: '700' },
+
+  errorModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    padding: spacing.md,
+  },
+  errorSheet: {
+    maxHeight: '86%',
+    backgroundColor: colors.bgElevated,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  errorSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginBottom: spacing.md },
+  errorSheetTitle: { color: colors.text, fontSize: fontSize.xl, fontWeight: '800' },
+  errorSheetMeta: { fontSize: fontSize.sm, fontWeight: '800', marginTop: 3 },
+  errorSheetMetaOk: { color: colors.green },
+  errorSheetMetaAlert: { color: colors.red },
+  iconButton: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle },
+  errorList: { maxHeight: 430 },
+  errorListContent: { paddingBottom: spacing.sm },
+  noErrorPanel: { minHeight: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: colors.greenDeep, borderWidth: 1, borderColor: colors.greenBorder },
+  noErrorTitle: { color: colors.green, fontSize: fontSize.md, fontWeight: '800', marginTop: spacing.sm },
+  errorItem: {
+    backgroundColor: colors.bgCard,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  errorItemHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  errorDot: { width: 10, height: 10, borderRadius: 5 },
+  errorItemTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800', flex: 1 },
+  errorLevelPill: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
+  errorLevelText: { fontSize: fontSize.xs, fontWeight: '800' },
+  errorDescription: { color: colors.textLight, fontSize: fontSize.sm, lineHeight: 18 },
+  errorCodeText: { color: colors.textFaint, fontSize: fontSize.xs, fontWeight: '700', marginTop: spacing.sm },
+  clearStatus: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.sm, textAlign: 'center' },
+  clearButton: { height: 48, borderRadius: 8, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  clearButtonDisabled: { backgroundColor: colors.bgInset },
+  clearButtonText: { color: colors.text, fontSize: fontSize.md, fontWeight: '800' },
 });

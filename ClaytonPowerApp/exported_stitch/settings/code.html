@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Clayton Power - Settings</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#131313",
+                        "on-tertiary-fixed": "#351000",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-surface-variant": "#c1c6d7",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed-variant": "#004493",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-secondary": "#003919",
+                        "on-tertiary-container": "#4c1a00",
+                        "surface-container-low": "#1c1b1b",
+                        "secondary-fixed": "#6bfe9c",
+                        "secondary": "#4ae183",
+                        "tertiary-fixed": "#ffdbcc",
+                        "surface-variant": "#353534",
+                        "on-secondary-fixed-variant": "#005228",
+                        "surface-dim": "#131313",
+                        "error-container": "#93000a",
+                        "surface-container-highest": "#353534",
+                        "tertiary-fixed-dim": "#ffb595",
+                        "on-error": "#690005",
+                        "on-background": "#e5e2e1",
+                        "surface-tint": "#adc6ff",
+                        "on-secondary-fixed": "#00210c",
+                        "surface-container-high": "#2a2a2a",
+                        "on-primary-fixed": "#001a41",
+                        "on-tertiary-fixed-variant": "#7c2e00",
+                        "primary-fixed": "#d8e2ff",
+                        "outline-variant": "#414755",
+                        "surface-container": "#201f1f",
+                        "surface-bright": "#393939",
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary": "#571e00",
+                        "on-primary": "#002e69",
+                        "secondary-fixed-dim": "#4ae183",
+                        "primary": "#adc6ff",
+                        "secondary-container": "#06bb63",
+                        "surface": "#131313",
+                        "inverse-surface": "#e5e2e1",
+                        "on-surface": "#e5e2e1",
+                        "primary-container": "#4b8eff",
+                        "outline": "#8b90a0",
+                        "tertiary": "#ffb595",
+                        "on-secondary-container": "#00431f",
+                        "inverse-primary": "#005bc1",
+                        "tertiary-container": "#ef6719",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-container": "#00285c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-lg": "32px",
+                        "gutter": "16px",
+                        "unit": "8px",
+                        "stack-md": "16px",
+                        "stack-sm": "8px",
+                        "container-padding": "24px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "display-data": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "numeric-md": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "display-data": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "numeric-md": ["18px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Safe area utilities for mobile devices */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .pt-safe { padding-top: env(safe-area-inset-top); }
+        
+        /* Custom Scrollbar for dark theme */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #353534; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #414755; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex flex-col pt-safe">
+<!-- TopAppBar -->
+<header class="bg-[#121212] docked full-width top-0 border-b border-[#333333] flex items-center justify-between px-6 py-4 w-full z-40 sticky">
+<button class="transition-colors duration-200 hover:bg-zinc-800/50 p-2 -ml-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-[#007AFF] font-['Inter'] uppercase tracking-wider text-xs font-bold" data-icon="bolt">bolt</span>
+</button>
+<h1 class="text-lg font-black text-white tracking-tighter truncate px-4">G3 Lithium System</h1>
+<button class="transition-colors duration-200 hover:bg-zinc-800/50 p-2 -mr-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-[#007AFF] font-['Inter'] uppercase tracking-wider text-xs font-bold" data-icon="battery_charging_full">battery_charging_full</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto pb-32 pt-stack-md px-container-padding space-y-stack-lg max-w-4xl mx-auto w-full">
+<!-- Header -->
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Settings</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Configure system parameters and view active logs.</p>
+</div>
+<!-- Units Management Section -->
+<section class="space-y-stack-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Active Unit</h3>
+<div class="grid grid-cols-2 gap-gutter">
+<!-- Active Unit (LPS) -->
+<button class="bg-surface-container rounded-lg border border-primary p-4 flex flex-col items-start relative overflow-hidden text-left hover:bg-surface-bright transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex justify-between items-center w-full mb-2">
+<span class="font-body-lg text-body-lg text-on-surface font-semibold">LPS</span>
+<span class="material-symbols-outlined text-primary text-xl" data-icon="radio_button_checked">radio_button_checked</span>
+</div>
+<span class="font-label-caps text-label-caps text-primary uppercase">Index 0</span>
+</button>
+<!-- Inactive Unit (BMS) -->
+<button class="bg-surface rounded-lg border border-outline-variant p-4 flex flex-col items-start text-left hover:bg-surface-container transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-outline-variant/50">
+<div class="flex justify-between items-center w-full mb-2">
+<span class="font-body-lg text-body-lg text-on-surface-variant font-semibold">BMS</span>
+<span class="material-symbols-outlined text-outline-variant text-xl" data-icon="radio_button_unchecked">radio_button_unchecked</span>
+</div>
+<span class="font-label-caps text-label-caps text-outline uppercase">Index 1</span>
+</button>
+</div>
+</section>
+<!-- Error Management Section -->
+<section class="space-y-stack-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Diagnostics</h3>
+<a class="block bg-surface rounded-lg border border-outline-variant p-4 hover:bg-surface-container transition-colors duration-200 group" href="#">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center border border-secondary/20">
+<span class="material-symbols-outlined text-secondary" data-icon="check_circle">check_circle</span>
+</div>
+<div>
+<div class="font-body-lg text-body-lg text-on-surface font-medium">Active Error Logs</div>
+<div class="font-body-md text-body-md text-secondary mt-0.5">System operating normally</div>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<div class="bg-surface-bright px-3 py-1 rounded-full border border-outline-variant">
+<span class="font-numeric-md text-numeric-md text-on-surface">0</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface transition-colors" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+</section>
+<!-- Configuration Categories -->
+<section class="space-y-stack-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Configuration Profiles</h3>
+<div class="bg-surface rounded-lg border border-outline-variant overflow-hidden shadow-sm shadow-black/20 divide-y divide-outline-variant/50">
+<!-- AC Output (Collapsed) -->
+<a class="flex items-center justify-between p-4 hover:bg-surface-container transition-colors duration-200 group" href="#">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-surface-bright flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="power">power</span>
+</div>
+<span class="font-body-lg text-body-lg text-on-surface font-medium">AC Output</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+<!-- AC Input (Collapsed) -->
+<a class="flex items-center justify-between p-4 hover:bg-surface-container transition-colors duration-200 group" href="#">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-surface-bright flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="input">input</span>
+</div>
+<span class="font-body-lg text-body-lg text-on-surface font-medium">AC Input</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+<!-- DC Output (Expanded Example) -->
+<div class="bg-surface-container-low border-y border-outline-variant/50">
+<button class="w-full flex items-center justify-between p-4 bg-surface-container focus:outline-none">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/40 shadow-[0_0_10px_rgba(75,142,255,0.1)]">
+<span class="material-symbols-outlined text-primary" data-icon="cable">cable</span>
+</div>
+<span class="font-body-lg text-body-lg text-primary font-medium">DC Output</span>
+</div>
+<span class="material-symbols-outlined text-primary" data-icon="expand_more">expand_more</span>
+</button>
+<!-- Expanded Settings List -->
+<div class="pl-14 pr-4 py-2 space-y-1 bg-surface-container-lowest border-t border-outline-variant/30">
+<!-- Setting Item -->
+<div class="flex items-center justify-between py-3 border-b border-outline-variant/30 last:border-0 group cursor-pointer">
+<div>
+<div class="font-body-md text-body-md text-on-surface">Low Voltage Cutoff</div>
+<div class="font-label-caps text-label-caps text-outline mt-1 uppercase">Threshold</div>
+</div>
+<div class="flex items-center space-x-3">
+<div class="bg-surface-bright px-3 py-1.5 rounded flex items-center border border-outline-variant group-hover:border-primary/50 transition-colors">
+<span class="font-numeric-md text-numeric-md text-on-surface">10.5</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant ml-1 uppercase">V</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary text-sm transition-colors" data-icon="edit">edit</span>
+</div>
+</div>
+<!-- Setting Item (Toggle Example) -->
+<div class="flex items-center justify-between py-3 border-b border-outline-variant/30 last:border-0 cursor-pointer">
+<div>
+<div class="font-body-md text-body-md text-on-surface">Output State</div>
+<div class="font-label-caps text-label-caps text-outline mt-1 uppercase">Manual Control</div>
+</div>
+<div class="w-11 h-6 bg-primary rounded-full relative shadow-inner border border-primary-container">
+<div class="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Solar (Collapsed) -->
+<a class="flex items-center justify-between p-4 hover:bg-surface-container transition-colors duration-200 group" href="#">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-surface-bright flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="solar_power">solar_power</span>
+</div>
+<span class="font-body-lg text-body-lg text-on-surface font-medium">Solar</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+<!-- General (Collapsed) -->
+<a class="flex items-center justify-between p-4 hover:bg-surface-container transition-colors duration-200 group" href="#">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-surface-bright flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="tune">tune</span>
+</div>
+<span class="font-body-lg text-body-lg text-on-surface font-medium">General</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="chevron_right">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- System Action -->
+<section class="pt-stack-md">
+<button class="w-full bg-surface hover:bg-surface-bright border border-outline-variant rounded-lg p-4 flex items-center justify-center space-x-2 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-outline-variant/50">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="restart_alt">restart_alt</span>
+<span class="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">Reboot System</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-[#1E1E1E] fixed bottom-0 w-full z-50 border-t border-[#333333] shadow-none flex justify-around items-center h-20 px-4 pb-safe">
+<!-- Connect (Inactive) -->
+<a class="flex flex-col items-center justify-center text-zinc-500 opacity-60 hover:text-white active:scale-95 transition-transform duration-150 w-20" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="bluetooth_connected">bluetooth_connected</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-widest mt-1">Connect</span>
+</a>
+<!-- Dashboard (Inactive) -->
+<a class="flex flex-col items-center justify-center text-zinc-500 opacity-60 hover:text-white active:scale-95 transition-transform duration-150 w-20" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-widest mt-1">Dashboard</span>
+</a>
+<!-- Settings (Active) -->
+<a class="flex flex-col items-center justify-center text-[#007AFF] font-bold hover:text-white active:scale-95 transition-transform duration-150 w-20" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="settings" data-weight="fill" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-['Inter'] font-medium text-[10px] uppercase tracking-widest mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

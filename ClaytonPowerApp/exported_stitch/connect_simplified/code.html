@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Clayton Power - Connect</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary": "#571e00",
+                        "secondary-fixed": "#e4e2e4",
+                        "secondary": "#c8c6c8",
+                        "inverse-primary": "#005bc1",
+                        "surface-container-high": "#2a2a2a",
+                        "on-tertiary-fixed": "#351000",
+                        "tertiary-fixed-dim": "#ffb595",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-primary-fixed": "#001a41",
+                        "secondary-fixed-dim": "#c8c6c8",
+                        "surface-variant": "#353534",
+                        "on-tertiary-fixed-variant": "#7c2e00",
+                        "surface-tint": "#adc6ff",
+                        "on-primary-fixed-variant": "#004493",
+                        "on-secondary-container": "#b6b4b7",
+                        "outline": "#8b90a0",
+                        "on-surface": "#e5e2e1",
+                        "surface-container-highest": "#353534",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary": "#303032",
+                        "surface-bright": "#393939",
+                        "surface": "#131313",
+                        "tertiary-container": "#ef6719",
+                        "on-primary-container": "#00285c",
+                        "outline-variant": "#414755",
+                        "on-surface-variant": "#c1c6d7",
+                        "surface-container-lowest": "#0e0e0e",
+                        "primary-container": "#4b8eff",
+                        "surface-dim": "#131313",
+                        "tertiary-fixed": "#ffdbcc",
+                        "on-primary": "#002e69",
+                        "surface-container-low": "#1c1b1b",
+                        "on-error": "#690005",
+                        "secondary-container": "#474649",
+                        "on-secondary-fixed": "#1b1b1d",
+                        "on-secondary-fixed-variant": "#474649",
+                        "surface-container": "#201f1f",
+                        "on-tertiary-container": "#4c1a00",
+                        "error": "#ffb4ab",
+                        "primary": "#adc6ff",
+                        "tertiary": "#ffb595",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#d8e2ff",
+                        "inverse-surface": "#e5e2e1",
+                        "background": "#131313",
+                        "on-background": "#e5e2e1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "sm": "8px",
+                        "container-padding": "20px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "card-gap": "12px",
+                        "unit": "4px"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["Inter"],
+                        "body-base": ["Inter"],
+                        "data-tabular": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "body-base": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "data-tabular": ["18px", { "lineHeight": "1", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #121212; }
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        /* Custom scanner animation */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
+            100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+        }
+        .scanner-indicator {
+            animation: pulse-ring 2s infinite;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-background min-h-screen flex flex-col selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar from JSON -->
+<header class="flex justify-between items-center h-16 px-6 w-full bg-[#121212] border-none docked full-width top-0 z-50">
+<span class="material-symbols-outlined text-[#007AFF] hover:opacity-80 transition-all active:scale-95 transition-transform cursor-pointer">bolt</span>
+<h1 class="text-zinc-50 font-black tracking-tighter text-sm font-inter">CLAYTON POWER</h1>
+<span class="material-symbols-outlined text-zinc-400 hover:opacity-80 transition-all active:scale-95 transition-transform cursor-pointer">battery_charging_full</span>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-container-padding pt-md pb-32 flex flex-col gap-lg overflow-y-auto w-full max-w-3xl mx-auto">
+<!-- Page Header & Scanner -->
+<div class="flex justify-between items-end pb-sm">
+<div>
+<h2 class="text-headline-md font-headline-md text-on-surface mb-unit">Connect</h2>
+<p class="text-body-base font-body-base text-on-surface-variant">Scanning for LPS II units</p>
+</div>
+<div class="flex items-center gap-sm bg-surface-container px-sm py-unit rounded-full">
+<div class="w-2 h-2 rounded-full bg-[#007AFF] scanner-indicator"></div>
+<span class="text-label-sm font-label-sm text-on-surface-variant uppercase">Scanning</span>
+</div>
+</div>
+<!-- Connected Device Section -->
+<section class="flex flex-col gap-sm">
+<h3 class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider pl-unit">Active Connection</h3>
+<div class="bg-[#1C1C1E] rounded-xl p-md flex flex-col md:flex-row md:items-center justify-between gap-md relative overflow-hidden">
+<!-- Subtle glow effect for active state -->
+<div class="absolute inset-0 bg-gradient-to-r from-[#007AFF]/10 to-transparent pointer-events-none"></div>
+<div class="flex items-center gap-md z-10">
+<div class="w-12 h-12 rounded-lg bg-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[#007AFF]" style="font-variation-settings: 'FILL' 1;">bluetooth_connected</span>
+</div>
+<div class="flex flex-col">
+<span class="text-data-tabular font-data-tabular text-on-surface">LPS II 3000-120</span>
+<div class="flex items-center gap-xs mt-unit">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+<span class="text-label-sm font-label-sm text-emerald-500">Connected &amp; Active</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between md:justify-end gap-lg z-10 w-full md:w-auto">
+<div class="flex items-center gap-xs text-emerald-500" title="Signal Strength: Excellent">
+<span class="material-symbols-outlined text-[20px]">signal_cellular_4_bar</span>
+<span class="text-label-sm font-label-sm">-45 dBm</span>
+</div>
+<button class="px-md py-sm rounded border border-outline-variant text-label-sm font-label-sm text-on-surface hover:bg-surface-container transition-colors active:scale-95">
+                        Disconnect
+                    </button>
+</div>
+</div>
+</section>
+<!-- Available Devices Section -->
+<section class="flex flex-col gap-sm">
+<h3 class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider pl-unit">Available Devices</h3>
+<div class="flex flex-col gap-card-gap">
+<!-- Device Card 1 -->
+<div class="bg-[#1C1C1E] rounded-xl p-md flex items-center justify-between group hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface transition-colors">devices</span>
+</div>
+<div class="flex flex-col">
+<span class="text-data-tabular font-data-tabular text-on-surface">LPS II 2500-100</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant mt-unit">Ready to pair</span>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs text-on-surface-variant hidden md:flex" title="Signal Strength: Good">
+<span class="material-symbols-outlined text-[20px]">signal_cellular_3_bar</span>
+</div>
+<button class="bg-[#007AFF] text-white px-lg py-sm rounded text-label-sm font-label-sm hover:opacity-90 transition-opacity active:scale-95 shadow-sm">
+                            Connect
+                        </button>
+</div>
+</div>
+<!-- Device Card 2 (Weaker Signal) -->
+<div class="bg-[#1C1C1E] rounded-xl p-md flex items-center justify-between group hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface transition-colors">devices</span>
+</div>
+<div class="flex flex-col">
+<span class="text-data-tabular font-data-tabular text-on-surface opacity-80">LPS II 1500-80</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant mt-unit">Ready to pair</span>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs text-on-surface-variant/50 hidden md:flex" title="Signal Strength: Weak">
+<span class="material-symbols-outlined text-[20px]">signal_cellular_1_bar</span>
+</div>
+<button class="bg-[#007AFF] text-white px-lg py-sm rounded text-label-sm font-label-sm hover:opacity-90 transition-opacity active:scale-95 shadow-sm">
+                            Connect
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Informational / Troubleshooting Footer -->
+<div class="mt-auto bg-surface-container-lowest border border-surface-container p-md rounded-lg flex items-start gap-md">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] mt-unit">info</span>
+<p class="text-label-sm font-label-sm text-on-surface-variant leading-relaxed">
+                Ensure your LPS II unit is powered on and within 10 meters. If a connection fails or devices do not appear, try restarting Bluetooth on your mobile device.
+            </p>
+</div>
+</main>
+<!-- BottomNavBar from JSON (Mobile Only, Connect Active) -->
+<nav class="fixed bottom-0 w-full z-50 h-20 rounded-t-lg bg-[#1C1C1E] shadow-[0px_-4px_20px_rgba(0,0,0,0.5)] flex justify-around items-center px-8 pb-safe md:hidden">
+<!-- Active Tab: Connect -->
+<a class="flex flex-col items-center justify-center text-[#007AFF] transition-colors duration-200 active:scale-90 transition-transform duration-150 w-16" href="#">
+<span class="material-symbols-outlined text-2xl mb-1" style="font-variation-settings: 'FILL' 1;">bluetooth_connected</span>
+<span class="font-inter font-medium text-[10px] uppercase tracking-wider">Connect</span>
+</a>
+<!-- Inactive Tab: Dashboard -->
+<a class="flex flex-col items-center justify-center text-zinc-500 transition-colors duration-200 hover:text-zinc-200 active:scale-90 transition-transform duration-150 w-16" href="#">
+<span class="material-symbols-outlined text-2xl mb-1">dashboard</span>
+<span class="font-inter font-medium text-[10px] uppercase tracking-wider">Dashboard</span>
+</a>
+<!-- Inactive Tab: Settings -->
+<a class="flex flex-col items-center justify-center text-zinc-500 transition-colors duration-200 hover:text-zinc-200 active:scale-90 transition-transform duration-150 w-16" href="#">
+<span class="material-symbols-outlined text-2xl mb-1">settings</span>
+<span class="font-inter font-medium text-[10px] uppercase tracking-wider">Settings</span>
+</a>
+</nav>
+</body></html>

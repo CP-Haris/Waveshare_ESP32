@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"mplab.mplab-importer.ignorePatterns": [
+			"R031-02_BMS_Rev01_02.X/nbproject/configurations.xml",
+			"R027-04_LPS_Main_V30/R027-04_LPS_Main_V30.X/nbproject/configurations.xml"
+		]
+	}
+}

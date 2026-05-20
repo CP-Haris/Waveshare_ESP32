@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Clayton Power LPS2 - Dashboard</title>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Theme Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary": "#571e00",
+                        "secondary-fixed": "#e4e2e4",
+                        "secondary": "#c8c6c8",
+                        "inverse-primary": "#005bc1",
+                        "surface-container-high": "#2a2a2a",
+                        "on-tertiary-fixed": "#351000",
+                        "tertiary-fixed-dim": "#ffb595",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-primary-fixed": "#001a41",
+                        "secondary-fixed-dim": "#c8c6c8",
+                        "surface-variant": "#353534",
+                        "on-tertiary-fixed-variant": "#7c2e00",
+                        "surface-tint": "#adc6ff",
+                        "on-primary-fixed-variant": "#004493",
+                        "on-secondary-container": "#b6b4b7",
+                        "outline": "#8b90a0",
+                        "on-surface": "#e5e2e1",
+                        "surface-container-highest": "#353534",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary": "#303032",
+                        "surface-bright": "#393939",
+                        "surface": "#131313",
+                        "tertiary-container": "#ef6719",
+                        "on-primary-container": "#00285c",
+                        "outline-variant": "#414755",
+                        "on-surface-variant": "#c1c6d7",
+                        "surface-container-lowest": "#0e0e0e",
+                        "primary-container": "#4b8eff",
+                        "surface-dim": "#131313",
+                        "tertiary-fixed": "#ffdbcc",
+                        "on-primary": "#002e69",
+                        "surface-container-low": "#1c1b1b",
+                        "on-error": "#690005",
+                        "secondary-container": "#474649",
+                        "on-secondary-fixed": "#1b1b1d",
+                        "on-secondary-fixed-variant": "#474649",
+                        "surface-container": "#201f1f",
+                        "on-tertiary-container": "#4c1a00",
+                        "error": "#ffb4ab",
+                        "primary": "#adc6ff",
+                        "tertiary": "#ffb595",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#d8e2ff",
+                        "inverse-surface": "#e5e2e1",
+                        "background": "#131313",
+                        "on-background": "#e5e2e1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "sm": "8px",
+                        "container-padding": "20px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "card-gap": "12px",
+                        "unit": "4px"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["Inter"],
+                        "body-base": ["Inter"],
+                        "data-tabular": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "body-base": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "data-tabular": ["18px", { "lineHeight": "1", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Hide scrollbar for a cleaner dashboard look */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        body {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-base">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center h-16 px-6 w-full docked full-width top-0 z-50 border-none bg-[#121212] flat no shadows">
+<button class="hover:opacity-80 transition-all active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[#007AFF]">bolt</span>
+</button>
+<h1 class="text-zinc-50 font-black tracking-tighter text-sm font-inter font-bold tracking-widest text-xs">CLAYTON POWER</h1>
+<button class="hover:opacity-80 transition-all active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[#007AFF]">battery_charging_full</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto px-container-padding pt-md pb-32 flex flex-col gap-card-gap">
+<!-- Hero SOC Section (EcoFlow Inspired) -->
+<section class="bg-surface-container-low rounded-xl p-lg flex flex-col items-center justify-center relative overflow-hidden">
+<!-- Subtle background glow -->
+<div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-50 pointer-events-none"></div>
+<div class="relative flex items-center justify-center w-48 h-48 mb-sm">
+<!-- Circular Progress Background -->
+<svg class="absolute inset-0 w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle class="stroke-surface-container-highest" cx="50" cy="50" fill="none" r="45" stroke-width="6"></circle>
+<!-- Progress Ring (85%) -->
+<circle class="stroke-primary" cx="50" cy="50" fill="none" r="45" stroke-dasharray="282.7" stroke-dashoffset="42.4" stroke-linecap="round" stroke-width="6"></circle>
+</svg>
+<div class="flex flex-col items-center z-10">
+<div class="flex items-baseline">
+<span class="font-display-lg text-display-lg text-on-surface">85</span>
+<span class="font-headline-md text-headline-md text-on-surface-variant ml-xs">%</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary mt-xs tracking-widest uppercase">Charging</span>
+</div>
+</div>
+<div class="text-center">
+<span class="font-data-tabular text-data-tabular text-on-surface">02:45</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant ml-xs">UNTIL FULL</span>
+</div>
+</section>
+<!-- Power Flow Bento Grid -->
+<section class="grid grid-cols-2 gap-card-gap">
+<!-- Input Card -->
+<div class="bg-surface-container-low rounded-xl p-md flex flex-col">
+<div class="flex items-center justify-between mb-md">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">input</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">INPUT</span>
+</div>
+</div>
+<div class="mb-sm">
+<span class="font-headline-md text-headline-md text-on-surface">450</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant ml-xs">W</span>
+</div>
+<!-- Mini bars/details -->
+<div class="flex flex-col gap-xs mt-auto pt-sm border-t border-surface-container-highest">
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">SOLAR</span>
+<span class="font-data-tabular text-[14px] text-on-surface">320 W</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">ALT</span>
+<span class="font-data-tabular text-[14px] text-on-surface">130 W</span>
+</div>
+</div>
+</div>
+<!-- Output Card -->
+<div class="bg-surface-container-low rounded-xl p-md flex flex-col">
+<div class="flex items-center justify-between mb-md">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-tertiary text-[20px]" style="font-variation-settings: 'FILL' 1;">output</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">OUTPUT</span>
+</div>
+</div>
+<div class="mb-sm">
+<span class="font-headline-md text-headline-md text-on-surface">120</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant ml-xs">W</span>
+</div>
+<!-- Mini bars/details -->
+<div class="flex flex-col gap-xs mt-auto pt-sm border-t border-surface-container-highest">
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">AC INV</span>
+<span class="font-data-tabular text-[14px] text-on-surface">80 W</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">DC 12V</span>
+<span class="font-data-tabular text-[14px] text-on-surface">40 W</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Core Telemetry List -->
+<section class="bg-surface-container-low rounded-xl flex flex-col overflow-hidden">
+<!-- Row 1: Voltage -->
+<div class="flex justify-between items-center p-md bg-surface-container/50">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">electric_meter</span>
+</div>
+<span class="font-body-base text-body-base text-on-surface-variant">Battery Voltage</span>
+</div>
+<div class="flex items-baseline gap-xs">
+<span class="font-data-tabular text-data-tabular text-on-surface">13.8</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">V</span>
+</div>
+</div>
+<!-- Row 2: Current -->
+<div class="flex justify-between items-center p-md">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">waves</span>
+</div>
+<span class="font-body-base text-body-base text-on-surface-variant">Net Current</span>
+</div>
+<div class="flex items-baseline gap-xs">
+<span class="font-data-tabular text-data-tabular text-primary">+ 24.5</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">A</span>
+</div>
+</div>
+<!-- Row 3: Temperature -->
+<div class="flex justify-between items-center p-md bg-surface-container/50">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">device_thermostat</span>
+</div>
+<span class="font-body-base text-body-base text-on-surface-variant">Cell Temp</span>
+</div>
+<div class="flex items-baseline gap-xs">
+<span class="font-data-tabular text-data-tabular text-on-surface">22</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">°C</span>
+</div>
+</div>
+</section>
+<!-- System Status & Quick Controls -->
+<section class="grid grid-cols-2 gap-card-gap">
+<div class="bg-surface-container-low rounded-xl p-md flex items-center justify-between">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block mb-xs">INVERTER</span>
+<div class="flex items-center gap-xs">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="font-data-tabular text-[14px] text-on-surface">Active</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">power</span>
+</div>
+<div class="bg-surface-container-low rounded-xl p-md flex items-center justify-between opacity-70">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block mb-xs">DC OUT</span>
+<div class="flex items-center gap-xs">
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+<span class="font-data-tabular text-[14px] text-on-surface">Standby</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">usb</span>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="flex justify-around items-center px-8 pb-safe fixed bottom-0 w-full z-50 h-20 rounded-t-lg shadow-[0px_-4px_20px_rgba(0,0,0,0.5)] bg-[#1C1C1E]">
+<!-- Connect (Inactive) -->
+<button class="flex flex-col items-center justify-center text-zinc-500 transition-colors duration-200 hover:text-zinc-200 active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1">bluetooth_connected</span>
+<span class="font-inter font-medium text-[10px] uppercase tracking-wider">Connect</span>
+</button>
+<!-- Dashboard (Active) -->
+<button class="flex flex-col items-center justify-center text-[#007AFF] transition-colors duration-200 hover:text-zinc-200 active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-inter font-medium text-[10px] uppercase tracking-wider">Dashboard</span>
+</button>
+<!-- Settings (Inactive) -->
+<button class="flex flex-col items-center justify-center text-zinc-500 transition-colors duration-200 hover:text-zinc-200 active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-inter font-medium text-[10px] uppercase tracking-wider">Settings</span>
+</button>
+</nav>
+</body></html>

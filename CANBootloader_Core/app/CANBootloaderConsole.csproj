@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <RuntimeIdentifiers>win-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    
+    <!-- Version: Automatically derived from git tags using MinVer -->
+    <!-- To release: git tag v2.4.0 then git push tags -->
+    <!-- Between tags, version auto increments as prerelease -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>2.3</MinVerMinimumMajorMinor>
+    
+    <!-- Single-file deployment configuration -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    
+    <!-- Ensure all content is bundled -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    
+    <!-- Application icon -->
+    <ApplicationIcon>ProgramIcon.ico</ApplicationIcon>
+    
+    <!-- Set to enable Advanced mode option (comment out for Simple-only builds) -->
+    <DefineConstants>$(DefineConstants);ENABLE_ADVANCED_MODE</DefineConstants> 
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="5.0.0" PrivateAssets="All" />
+    <PackageReference Include="System.IO.Ports" Version="7.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>
+

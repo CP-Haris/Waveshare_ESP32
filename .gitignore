@@ -1,0 +1,50 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.claude/
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# Node / Expo / React Native
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.tsbuildinfo
+ios/
+android/
+
+# .NET build output and local project state
+[Bb]in/
+[Oo]bj/
+*.user
+*.lscache
+
+# ESP-IDF / CMake generated output
+build/
+managed_components/
+sdkconfig.old
+cmake-build-*/
+compile_commands.json
+dependencies.lock.tmp
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig

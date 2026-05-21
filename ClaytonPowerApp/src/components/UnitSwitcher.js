@@ -20,8 +20,8 @@ function unitKind(unit) {
 function unitLabel(unit) {
   if (!unit) return 'Select unit';
   const primary = String(unit.partNumber || '').trim() || unitKind(unit);
-  const serial = String(unit.serial || '').trim();
-  return [primary, serial].filter(Boolean).join(' ');
+  const serialSuffix = String(unit.serial || '').replace(/\D/g, '').slice(-4);
+  return serialSuffix ? `${primary} - ${serialSuffix}` : primary;
 }
 
 export default function UnitSwitcher() {

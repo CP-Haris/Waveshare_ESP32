@@ -29,6 +29,8 @@
 
 static const char *TAG = "can_hmi";
 
+#define DASHBOARD_UI_UPDATE_MS 200
+
 #define BOOT_TX_VERBOSE_PACKET_LIMIT 3
 #define BOOT_TX_PROGRESS_INTERVAL 100
 static bool ble_can_passthrough_enabled = false;
@@ -1402,6 +1404,14 @@ static lv_color_t get_soc_color(float soc)
     return COL_RED;
 }
 
+static void set_label_text_if_changed(lv_obj_t *label, const char *text)
+{
+    const char *current = lv_label_get_text(label);
+    if (!current || strcmp(current, text) != 0) {
+        lv_label_set_text(label, text);
+    }
+}
+
 static void format_setting_value(char *buf, size_t buflen, setting_t *s, int32_t val)
 {
     float fval = Q16_TO_FLOAT(val);
@@ -2558,7 +2568,7 @@ static void update_device_selector(void)
         }
     } else
         snprintf(buf, sizeof(buf), "No Unit");
-    lv_label_set_text(lbl_dev_name, buf);
+    set_label_text_if_changed(lbl_dev_name, buf);
 
     if (selected_unit >= 0 && unit_table[selected_unit].status == UNIT_ONLINE)
         lv_obj_set_style_bg_color(lbl_dev_status, COL_GREEN, 0);
@@ -2764,6 +2774,8 @@ static void create_dashboard(lv_obj_t *parent)
 // ---------------------------------------------------------------------------
 static void update_dashboard(void)
 {
+    static bool dashboard_layout_initialized = false;
+    static bool dashboard_layout_bms = false;
     char buf[64];
     update_device_selector();
 
@@ -2779,7 +2791,7 @@ static void update_dashboard(void)
     lv_color_t soc_col = get_soc_color(lps.soc_percent);
     lv_obj_set_style_arc_color(arc_soc, soc_col, LV_PART_INDICATOR);
     snprintf(buf, sizeof(buf), "%d%%", soc_val);
-    lv_label_set_text(lbl_soc_pct, buf);
+    set_label_text_if_changed(lbl_soc_pct, buf);
     lv_obj_set_style_text_color(lbl_soc_pct, soc_col, 0);
 
     // Time left
@@ -2803,28 +2815,33 @@ static void update_dashboard(void)
             snprintf(buf, sizeof(buf), "Standby");
             lv_obj_set_style_text_color(lbl_time_left, COL_TEXT_DIM, 0);
         }
-        lv_label_set_text(lbl_time_left, buf);
+        set_label_text_if_changed(lbl_time_left, buf);
     }
 
     // Battery info
     snprintf(buf, sizeof(buf), "%.1f V   %+.1f A",
              (double)lps.battery_voltage_v, (double)lps.battery_current_a);
-    lv_label_set_text(lbl_batt_info, buf);
+    set_label_text_if_changed(lbl_batt_info, buf);
 
     // Toggle buttons
     device_type_t cur_dev_type = DEV_UNKNOWN;
     if (selected_unit >= 0) cur_dev_type = unit_table[selected_unit].device_type;
 
-    if (cur_dev_type == DEV_BMS) {
-        lv_obj_add_flag(btn_inv_toggle, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_size(btn_dcout_toggle, 600, 56);
-        lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_MID, 0, -16);
-    } else {
-        lv_obj_clear_flag(btn_inv_toggle, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_size(btn_inv_toggle, 300, 56);
-        lv_obj_align(btn_inv_toggle, LV_ALIGN_BOTTOM_LEFT, 100, -16);
-        lv_obj_set_size(btn_dcout_toggle, 300, 56);
-        lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_RIGHT, -100, -16);
+    bool layout_bms = (cur_dev_type == DEV_BMS);
+    if (!dashboard_layout_initialized || dashboard_layout_bms != layout_bms) {
+        if (layout_bms) {
+            lv_obj_add_flag(btn_inv_toggle, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_size(btn_dcout_toggle, 600, 56);
+            lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_MID, 0, -16);
+        } else {
+            lv_obj_clear_flag(btn_inv_toggle, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_size(btn_inv_toggle, 300, 56);
+            lv_obj_align(btn_inv_toggle, LV_ALIGN_BOTTOM_LEFT, 100, -16);
+            lv_obj_set_size(btn_dcout_toggle, 300, 56);
+            lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_RIGHT, -100, -16);
+        }
+        dashboard_layout_initialized = true;
+        dashboard_layout_bms = layout_bms;
     }
 
     // Inverter state
@@ -2848,7 +2865,7 @@ static void update_dashboard(void)
         }
         lv_obj_set_style_bg_color(btn_inv_toggle, bg, 0);
         lv_obj_set_style_border_color(btn_inv_toggle, border, 0);
-        lv_label_set_text(lbl_inv_toggle, text);
+        set_label_text_if_changed(lbl_inv_toggle, text);
         lv_obj_set_style_text_color(lbl_inv_toggle, txt_col, 0);
     }
 
@@ -2873,7 +2890,7 @@ static void update_dashboard(void)
         }
         lv_obj_set_style_bg_color(btn_dcout_toggle, bg, 0);
         lv_obj_set_style_border_color(btn_dcout_toggle, border, 0);
-        lv_label_set_text(lbl_dcout_toggle, text);
+        set_label_text_if_changed(lbl_dcout_toggle, text);
         lv_obj_set_style_text_color(lbl_dcout_toggle, txt_col, 0);
     }
 
@@ -2904,7 +2921,7 @@ static void update_dashboard(void)
                     col = COL_ORANGE; txt = texts_wait[i];
                 }
                 lv_obj_set_style_text_color(icons[i], col, 0);
-                lv_label_set_text(icons[i], txt);
+                set_label_text_if_changed(icons[i], txt);
             }
         }
 
@@ -3543,9 +3560,10 @@ void can_hmi_task(void *arg)
             process_pending_timeouts();
         }
 
-        // UI update at ~20fps — must hold LVGL mutex
+        // UI update — must hold LVGL mutex
         uint32_t now = now_ms();
-        if (now - last_ui_update >= 50) {
+        uint32_t ui_update_ms = (current_page == PAGE_DASHBOARD) ? DASHBOARD_UI_UPDATE_MS : 50;
+        if (now - last_ui_update >= ui_update_ms) {
             if (lvgl_port_lock(10)) {
                 // Power management — skip normal UI when display off or splash showing
                 if (!pwr_management_tick()) {

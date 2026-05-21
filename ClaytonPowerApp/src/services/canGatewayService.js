@@ -352,11 +352,9 @@ class CanGatewayService {
     if (data.length < 8) return;
 
     if (pgnByte === 0x00) {
-      if (data[2] !== 0xff) {
-        unit.serial = `${String(data[0]).padStart(2, '0')}.${String(data[1]).padStart(2, '0')}.${String(data[2]).padStart(2, '0')}-${String(data[3]).padStart(2, '0')}${String(data[4]).padStart(2, '0')}${String(data[5]).padStart(2, '0')}-${String(data[6]).padStart(2, '0')}${String(data[7]).padStart(2, '0')}`;
-      } else {
-        unit.serial = `${String(data[0]).padStart(2, '0')}.${String(data[1]).padStart(2, '0')}-${String(data[3]).padStart(2, '0')}${String(data[4]).padStart(2, '0')}${String(data[5]).padStart(2, '0')}-${String(data[6]).padStart(2, '0')}${String(data[7]).padStart(2, '0')}`;
-      }
+      const major = (data[3] & 0xff) * 10000 + (data[4] & 0xff) * 100 + (data[5] & 0xff);
+      const minor = (data[6] & 0xff) * 100 + (data[7] & 0xff);
+      unit.serial = `${String(major).padStart(6, '0')}-${String(minor).padStart(4, '0')}`;
       return;
     }
 

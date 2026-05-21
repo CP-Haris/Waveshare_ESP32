@@ -27,12 +27,6 @@ function unitLabel(unit) {
   return `${unitKind(unit)} ${canAddressLabel(unit)}`;
 }
 
-function unitDetail(unit) {
-  if (unit?.partNumber) return unit.partNumber;
-  if (unit?.serial) return unit.serial;
-  return `CAN address ${canAddressLabel(unit)}`;
-}
-
 export default function UnitSwitcher() {
   const [connected, setConnected] = useState(bleService.isConnected);
   const [units, setUnits] = useState(() => canGatewayService.getUnits());
@@ -143,9 +137,9 @@ export default function UnitSwitcher() {
                       <MaterialIcons name={unitKind(unit) === 'Battery' ? 'battery-full' : 'memory'} size={19} color={isActive ? colors.accent : colors.textMuted} />
                     </View>
                     <View style={styles.unitCopy}>
-                      <Text style={styles.unitTitle}>{unitLabel(unit)}</Text>
-                      <Text style={styles.unitSub} numberOfLines={1}>{unitDetail(unit)}</Text>
-                      {!!unit.serial && <Text style={styles.unitSerial} numberOfLines={1}>{unit.serial}</Text>}
+                      <Text style={styles.unitTitle}>{unitKind(unit)}</Text>
+                      <Text style={styles.unitSub} numberOfLines={1}>{unit.partNumber || '-'}</Text>
+                      <Text style={styles.unitSerial} numberOfLines={1}>{unit.serial || '-'}</Text>
                     </View>
                     {hasErrors && (
                       <View style={styles.errorBadge}>

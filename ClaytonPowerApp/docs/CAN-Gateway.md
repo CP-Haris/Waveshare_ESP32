@@ -23,7 +23,7 @@ Dashboard data is decoded from normal Clayton/J1939 CAN broadcasts:
 - The Dashboard maps active failure codes through the same error table used by the ESP32 display.
 - Clearing errors uses CAN_Extra `SET_VAL` on block `1`, id `252`, value `1234`.
 
-The app keeps the selected unit locally. Selecting a unit does not send a BLE command to the ESP32.
+The app keeps the active unit as global app-side state exposed by the header unit switcher. Selecting a unit only changes which locally parsed unit snapshot Dashboard and Settings use; it does not send a BLE command to the ESP32.
 
 ## Unit discovery
 
@@ -49,6 +49,8 @@ Commands:
 - `0x44 GET_MAX`
 
 Responses are decoded from `0x19EF` or `0x15EF` frames whose source address matches the selected unit. Range responses are combined in the app from the matching min and max replies.
+
+Settings follows the global active unit. When the active unit changes, pending setting reads/writes and local editor state are cleared before the new unit's values are requested.
 
 The inverter and DC output switches are ordinary setting writes:
 

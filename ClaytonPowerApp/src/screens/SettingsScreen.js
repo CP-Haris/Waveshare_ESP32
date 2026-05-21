@@ -151,9 +151,8 @@ function normalizeUnitKind(type, partNumber) {
 
 export default function SettingsScreen() {
   const [connected, setConnected] = useState(bleService.isConnected);
-  const [units, setUnits] = useState([]);
-  const [activeUnitIndex, setActiveUnitIndex] = useState(0);
-  const [activeUnitKind, setActiveUnitKind] = useState(UNIT_KIND.LPS);
+  const initialActiveUnit = canGatewayService.getActiveUnitInfo();
+  const [activeUnitKind, setActiveUnitKind] = useState(() => normalizeUnitKind(initialActiveUnit?.type, initialActiveUnit?.partNumber));
   const [errors, setErrors] = useState([]);
 
   const [screen, setScreen] = useState('categories');
@@ -174,74 +173,13 @@ export default function SettingsScreen() {
   const lastValueRequestRef = useRef({});
   const lastValueResponseRef = useRef({});
   const retryCountRef = useRef({});
+  const activeUnitIndexRef = useRef(initialActiveUnit?.index ?? null);
 
   const categories = useMemo(
     () => (activeUnitKind === UNIT_KIND.BMS ? BMS_CATEGORIES : LPS_CATEGORIES),
     [activeUnitKind]
   );
   const selectedCategory = categories.find((c) => c.key === selectedCategoryKey) || null;
-
-  useEffect(() => {
-    const unsubConn = bleService.onConnectionChange(setConnected);
-    const unsubNotif = canGatewayService.onNotification((msg) => {
-      if (msg.type === 'unitInfo') {
-        const normalized = {
-          ...msg.data,
-          kind: normalizeUnitKind(msg.data.type, msg.data.partNumber),
-        };
-        setUnits((prev) => {
-          const existing = prev.findIndex((u) => u.index === normalized.index);
-          if (existing >= 0) {
-            const next = [...prev];
-            next[existing] = normalized;
-            return next;
-          }
-          return [...prev, normalized];
-        });
-      }
-
-      if (msg.type === 'errors') setErrors(msg.data);
-
-      if (msg.type === 'settingValue') {
-        const key = `${msg.data.block}-${msg.data.id}`;
-        lastValueResponseRef.current[key] = Date.now();
-        retryCountRef.current[key] = 0;
-        setSettingValues((prev) => ({ ...prev, [key]: msg.data.value }));
-        setLoadingSettings((prev) => ({ ...prev, [key]: false }));
-        setSaveStatus((prev) => {
-          const next = { ...prev };
-          if (next[key] === 'saving' || next[key] === 'queued') next[key] = 'saved';
-          return next;
-        });
-        if (loadTimersRef.current[key]) {
-          clearTimeout(loadTimersRef.current[key]);
-          delete loadTimersRef.current[key];
-        }
-        if (saveTimersRef.current[key]) {
-          clearTimeout(saveTimersRef.current[key]);
-          delete saveTimersRef.current[key];
-        }
-      }
-
-      if (msg.type === 'settingRange') {
-        const key = `${msg.data.block}-${msg.data.id}`;
-        setSettingRanges((prev) => ({ ...prev, [key]: { min: msg.data.min, max: msg.data.max } }));
-        setLoadingSettings((prev) => ({ ...prev, [key]: false }));
-      }
-    });
-
-    return () => {
-      unsubConn();
-      unsubNotif();
-      if (requestPumpRef.current) {
-        clearTimeout(requestPumpRef.current);
-        requestPumpRef.current = null;
-      }
-      requestQueueRef.current = [];
-      Object.values(loadTimersRef.current).forEach((timer) => clearTimeout(timer));
-      Object.values(saveTimersRef.current).forEach((timer) => clearTimeout(timer));
-    };
-  }, []);
 
   const enqueueCommand = useCallback((sendRequest) => {
     if (!sendRequest) return;
@@ -295,31 +233,101 @@ export default function SettingsScreen() {
     retryCountRef.current = {};
   }, []);
 
-  const refreshUnits = useCallback(() => {
-    setUnits([]);
-    canGatewayService.requestUnits();
-  }, []);
+  const resetSettingSession = useCallback(() => {
+    clearPendingSettingActivity();
+    setSelectedCategoryKey(null);
+    setScreen('categories');
+    setEditorVisible(false);
+    setEditorDef(null);
+    setSettingValues({});
+    setSettingRanges({});
+    setLoadingSettings({});
+    setSaveStatus({});
+    lastValueRequestRef.current = {};
+    lastValueResponseRef.current = {};
+  }, [clearPendingSettingActivity]);
+
+  const syncActiveUnit = useCallback(() => {
+    const activeUnit = canGatewayService.getActiveUnitInfo();
+    if (!activeUnit) {
+      activeUnitIndexRef.current = null;
+      setActiveUnitKind(UNIT_KIND.LPS);
+      return;
+    }
+
+    const nextKind = normalizeUnitKind(activeUnit.type, activeUnit.partNumber);
+    const previousIndex = activeUnitIndexRef.current;
+    activeUnitIndexRef.current = activeUnit.index;
+    setActiveUnitKind(nextKind);
+
+    if (previousIndex !== activeUnit.index) resetSettingSession();
+  }, [resetSettingSession]);
 
   const refreshErrors = useCallback(() => {
     canGatewayService.requestErrors();
   }, []);
 
   useEffect(() => {
-    if (connected) {
-      refreshUnits();
-      refreshErrors();
-    }
-  }, [connected, refreshUnits, refreshErrors]);
+    syncActiveUnit();
+
+    const unsubConn = bleService.onConnectionChange((nextConnected) => {
+      setConnected(nextConnected);
+      if (!nextConnected) {
+        activeUnitIndexRef.current = null;
+        setErrors([]);
+        resetSettingSession();
+        return;
+      }
+      syncActiveUnit();
+      canGatewayService.requestErrors();
+    });
+
+    const unsubNotif = canGatewayService.onNotification((msg) => {
+      if (msg.type === 'unitInfo' || msg.type === 'dashboard') syncActiveUnit();
+
+      if (msg.type === 'errors') setErrors(msg.data);
+
+      if (msg.type === 'settingValue') {
+        const key = `${msg.data.block}-${msg.data.id}`;
+        lastValueResponseRef.current[key] = Date.now();
+        retryCountRef.current[key] = 0;
+        setSettingValues((prev) => ({ ...prev, [key]: msg.data.value }));
+        setLoadingSettings((prev) => ({ ...prev, [key]: false }));
+        setSaveStatus((prev) => {
+          const next = { ...prev };
+          if (next[key] === 'saving' || next[key] === 'queued') next[key] = 'saved';
+          return next;
+        });
+        if (loadTimersRef.current[key]) {
+          clearTimeout(loadTimersRef.current[key]);
+          delete loadTimersRef.current[key];
+        }
+        if (saveTimersRef.current[key]) {
+          clearTimeout(saveTimersRef.current[key]);
+          delete saveTimersRef.current[key];
+        }
+      }
+
+      if (msg.type === 'settingRange') {
+        const key = `${msg.data.block}-${msg.data.id}`;
+        setSettingRanges((prev) => ({ ...prev, [key]: { min: msg.data.min, max: msg.data.max } }));
+        setLoadingSettings((prev) => ({ ...prev, [key]: false }));
+      }
+    });
+
+    return () => {
+      unsubConn();
+      unsubNotif();
+      clearPendingSettingActivity();
+    };
+  }, [clearPendingSettingActivity, resetSettingSession, syncActiveUnit]);
 
   useEffect(() => {
-    if (units.length === 0) return;
-    const active = units.find((u) => u.index === activeUnitIndex) || units[0];
-    if (active.index !== activeUnitIndex) {
-      setActiveUnitIndex(active.index);
-      canGatewayService.selectUnit(active.index);
+    if (connected) {
+      syncActiveUnit();
+      refreshErrors();
     }
-    setActiveUnitKind(active.kind || normalizeUnitKind(active.type, active.partNumber));
-  }, [units, activeUnitIndex]);
+  }, [connected, refreshErrors, syncActiveUnit]);
 
   const requestCategoryData = useCallback((category, options = {}) => {
     const { force = false } = options;
@@ -347,22 +355,6 @@ export default function SettingsScreen() {
     setScreen('detail');
     requestCategoryData(category, { force: true });
   }, [clearPendingSettingActivity, requestCategoryData]);
-
-  const selectUnit = useCallback((index, kind) => {
-    clearPendingSettingActivity();
-    setActiveUnitIndex(index);
-    setActiveUnitKind(kind || UNIT_KIND.LPS);
-    setSelectedCategoryKey(null);
-    setScreen('categories');
-    setEditorVisible(false);
-    setSettingValues({});
-    setSettingRanges({});
-    setLoadingSettings({});
-    setSaveStatus({});
-    lastValueRequestRef.current = {};
-    lastValueResponseRef.current = {};
-    canGatewayService.selectUnit(index);
-  }, [clearPendingSettingActivity]);
 
   useEffect(() => {
     if (screen !== 'detail' || !selectedCategory) return;
@@ -448,7 +440,6 @@ export default function SettingsScreen() {
     }
   }, [loadingSettings, saveStatus]);
 
-  const deviceTypeLabel = (unit) => unit?.kind || normalizeUnitKind(unit?.type, unit?.partNumber);
   const editorEnumIndex = editorDef?.prefix === PREFIX.ENUM ? editorDraft >> 16 : null;
   const editorFastStep = editorDef ? getFastStep(editorDef) : 65536;
 
@@ -470,44 +461,6 @@ export default function SettingsScreen() {
         <Text style={styles.pageSubtitle}>
           {screen === 'categories' ? 'Choose a settings category to edit.' : selectedCategory?.label || 'Settings'}
         </Text>
-
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionLabel}>ACTIVE UNIT</Text>
-          <TouchableOpacity onPress={refreshUnits} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <MaterialIcons name="refresh" size={18} color={colors.accent} />
-          </TouchableOpacity>
-        </View>
-
-        {units.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>Tap refresh to discover units</Text>
-          </View>
-        ) : (
-          <View style={styles.unitGrid}>
-            {units.map((u) => {
-              const isActive = u.index === activeUnitIndex;
-              return (
-                <TouchableOpacity
-                  key={u.index}
-                  style={[styles.unitCard, isActive && styles.unitCardActive]}
-                  onPress={() => selectUnit(u.index, u.kind)}
-                >
-                  <View style={styles.unitCardInner}>
-                    <View style={styles.unitCardTop}>
-                      <Text style={styles.unitType}>{deviceTypeLabel(u)}</Text>
-                      <MaterialIcons
-                        name={isActive ? 'radio-button-checked' : 'radio-button-unchecked'}
-                        size={20}
-                        color={isActive ? colors.accent : colors.textGhost}
-                      />
-                    </View>
-                    <Text style={styles.unitIndex}>INDEX {u.index}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
 
         <Text style={styles.sectionLabel}>DIAGNOSTICS</Text>
         <TouchableOpacity style={styles.diagCard} onPress={refreshErrors}>
@@ -712,25 +665,6 @@ const styles = StyleSheet.create({
   },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   backText: { color: colors.accent, fontWeight: '700', fontSize: fontSize.sm },
-
-  unitGrid: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  unitCard: { flex: 1, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  unitCardActive: { borderColor: colors.accent, borderLeftWidth: 3 },
-  unitCardInner: { backgroundColor: colors.bgElevated, padding: spacing.md },
-  unitCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  unitType: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  unitIndex: { color: colors.accent, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
-
-  emptyCard: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  emptyText: { color: colors.textFaint, fontSize: fontSize.sm },
 
   diagCard: {
     backgroundColor: colors.bgElevated,

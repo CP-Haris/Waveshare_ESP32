@@ -165,6 +165,17 @@ class CanGatewayService {
     return () => this.listeners.delete(listener);
   }
 
+  getUnits() {
+    return Array.from(this.unitsByAddr.values())
+      .sort((left, right) => left.index - right.index)
+      .map((unit) => this._unitInfo(unit));
+  }
+
+  getActiveUnitInfo() {
+    const activeUnit = this._getActiveUnit();
+    return activeUnit ? this._unitInfo(activeUnit) : null;
+  }
+
   async ensurePassthrough() {
     if (!bleService.isConnected) return false;
 
@@ -557,6 +568,8 @@ class CanGatewayService {
       addr: unit.addr,
       partNumber: unit.partNumber,
       serial: unit.serial,
+      connected: !!unit.data.connected,
+      errorCount: unit.data.errorCount,
     };
   }
 

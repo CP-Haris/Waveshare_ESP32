@@ -46,15 +46,19 @@ ClaytonPowerApp/
 │   ├── screens/
 │   │   ├── ConnectScreen.js      # BLE scan & connection UI
 │   │   ├── DashboardScreen.js    # Live telemetry display
-│   │   └── SettingsScreen.js     # Units, errors, diagnostics
+│   │   ├── SettingsScreen.js     # CAN_Extra configuration editor
+│   │   └── FirmwareUpdateScreen.js # CAN bootloader update flow
 │   ├── components/
-│   │   ├── DataCard.js           # Reusable metric tile
-│   │   ├── SocArc.js             # Circular SOC ring
-│   │   └── StatusBadge.js        # Component status indicator
+│   │   ├── ScreenHeader.js       # Shared title/header row
+│   │   ├── UnitSwitcher.js       # Global active unit selector
+│   │   └── SocRing.js            # Dashboard SOC ring
 │   ├── services/
-│   │   └── bleService.js         # BLE singleton (scan, connect, notify)
+│   │   ├── bleService.js         # BLE singleton (scan, connect, notify)
+│   │   ├── canGatewayService.js  # App-side raw CAN parser and sender
+│   │   └── firmwareUpdateService.js # Bootloader transport/update state machine
 │   └── utils/
 │       ├── protocol.js           # Binary encode/decode
+│       ├── errorCodes.js         # Error code lookup table
 │       └── theme.js              # Dark theme colors & spacing
 └── assets/                       # Icons & splash screens
 ```
@@ -70,7 +74,6 @@ ClaytonPowerApp/
 | `react-native-ble-plx` | 3.5.1 | BLE scanning, connection, GATT |
 | `@react-navigation/native` | v7 | Navigation container |
 | `@react-navigation/bottom-tabs` | v7 | Bottom tab navigator |
-| `react-native-svg` | — | SocArc circular chart |
 
 ---
 
@@ -125,13 +128,14 @@ eas build --platform android --profile preview
 
 ### Navigation Structure (`App.js`)
 
-Bottom Tab Navigator with 3 tabs:
+Bottom Tab Navigator with 4 tabs:
 
 | Tab | Icon | Screen | Initial Route |
 |-----|------|--------|---------------|
-| Dashboard | 📊 | `DashboardScreen` | — |
-| Settings | ⚙️ | `SettingsScreen` | — |
-| Connect | 📡 | `ConnectScreen` | ✓ (initial) |
+| Dashboard | dashboard | `DashboardScreen` | — |
+| Settings | settings | `SettingsScreen` | — |
+| Update | system-update | `FirmwareUpdateScreen` | — |
+| Connect | bluetooth-connected | `ConnectScreen` | yes |
 
 **Connection badge**: Red `!` badge on the Connect tab when BLE is disconnected.
 
@@ -162,17 +166,12 @@ Real-time monitoring of the selected LPS/BMS unit.
 
 | Section | Content |
 |---------|---------|
-| Header | Unit type (LPS/BMS) + green/red connection dot |
+| Header | Shared Clayton Power header with global unit switcher |
 | SOC Ring | Large circular arc (0–100%), time-to-full/empty below |
-| Battery | Voltage, current (green=charging / orange=discharging), DOD Ah |
-| Cells | 4× cell voltages |
-| DC Power | DC In voltage+current, DC Out voltage+current |
-| AC Power | AC In watts, AC Out watts (hidden if zero/unavailable) |
-| Solar | Solar current (hidden if unavailable, gold color) |
-| Temperature | Up to 3 internal sensors + cell average |
-| System Status | 5 `StatusBadge` components: Inverter, Charger, DC-In, DC-Out, Solar |
-| Quick Controls | ⚡ Inverter toggle, 🔌 DC Output toggle |
-| Errors | Active error codes list (red, hidden when no errors) |
+| Product identity | Part number, serial number, unit family |
+| System power | Product-specific system cards. CL/LPS shows DC Output, DC Input, Inverter, Charger, Solar. CB/Battery shows Battery. |
+| Quick Controls | Inverter and DC Output toggles for LPS units only |
+| Errors | Error overview modal with decoded error meanings and clear-errors command |
 
 **State machine:**
 - State names: Error (−1), Off (0), On (1), Standby (2), Charge (3), Float (4)
@@ -181,21 +180,30 @@ Real-time monitoring of the selected LPS/BMS unit.
 
 ### Screen: Settings (`src/screens/SettingsScreen.js`)
 
-Device management and diagnostics.
+CAN_Extra configuration editor for the globally selected unit.
 
 **Sections:**
 
 | Section | Content |
 |---------|---------|
-| Discovered Units | All cascade units found from CAN frames, tap to select locally in the app |
-| Error Codes | Active error list, green card when clear |
-| About | Protocol version, service UUID, app version |
+| Diagnostics | Active error count for the selected unit |
+| Configuration Profiles | LPS/BMS-specific settings categories |
+| Detail editor | Reads ranges and values over CAN_Extra, then writes updated values back to the selected unit |
 
-**Manual refresh buttons:**
-- "Refresh Units" sends CAN identification requests through the gateway.
-- "Refresh Errors" reads the latest failure-code broadcast data already decoded by the app.
+Unit switching is not owned by Settings. The shared header `UnitSwitcher` controls the app-wide active unit; Settings clears pending reads/writes and editor state when that active unit changes.
 
-Each unit shows: type (LPS/BMS), part number, serial number, index, CAN address (hex).
+---
+
+### Screen: Firmware Update (`src/screens/FirmwareUpdateScreen.js`)
+
+Bootloader update flow over the same raw CAN-over-BLE gateway.
+
+**Flow:**
+1. Uses the header-selected unit as the preferred CAN target.
+2. Discovers part number, serial number, and bridge firmware versions from CAN frames.
+3. Builds a product-specific update plan: CB/Battery exposes bridge 1; CL/LPS exposes bridges 1-4.
+4. Shows non-responding CL/LPS bridges as `Cannot update` instead of hiding them.
+5. Runs updates only for bridges with a valid current version and newer compatible released firmware.
 
 ---
 
@@ -279,69 +287,38 @@ Dashboard and Settings are decoded from CAN frames in `src/services/canGatewaySe
 
 ## 9. Components
 
-### `DataCard` (`src/components/DataCard.js`)
+### `ScreenHeader` (`src/components/ScreenHeader.js`)
 
-Reusable metric tile.
+Shared header used by Dashboard, Settings, Update, and Connect. It renders the app title and the global `UnitSwitcher` when units are known.
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `title` | string | Label (displayed uppercase, gray) |
-| `value` | string/number | Main value (large, colored) |
-| `unit` | string | Unit suffix (small, gray) |
-| `color` | string | Value text color (from theme) |
-| `small` | bool | Compact variant for denser layouts |
+### `UnitSwitcher` (`src/components/UnitSwitcher.js`)
 
----
+Header control and modal list for selecting the active app-side CAN unit. The compact header label uses part number plus the last four serial digits, for example `CB2303 - 0021`. The modal shows unit family, part number, and full serial number on separate lines.
 
-### `SocArc` (`src/components/SocArc.js`)
+### `SocRing` (`src/components/SocRing.js`)
 
-Circular arc progress ring for SOC display.
+Circular SOC display rendered with React Native views.
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `percent` | number | 0–100 |
+| `pct` | number | 0–100 |
 | `size` | number | Diameter in pixels |
-| `strokeWidth` | number | Arc thickness |
-| `color` | string | Arc color (green/orange/red by level) |
-
-Rendered with `react-native-svg` arcs.
-
----
-
-### `StatusBadge` (`src/components/StatusBadge.js`)
-
-Subsystem status indicator (inverter, charger, DC-in, DC-out, solar).
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `label` | string | Subsystem name |
-| `state` | int8 | −1=Error, 0=Off, 1=On, 2=Standby, 3=Charge, 4=Float |
-| `fail` | uint8 | Non-zero = fail code present |
-
-**Rendering logic:**
-- `fail > 0` → red dot + red "Error" text
-- `state === 1` → green dot + "On"
-- `state === 0` → gray dot + "Off"
-- `state === 2` → blue dot + "Standby"
-- `state === 3` → yellow dot + "Charge"
-- `state === 4` → teal dot + "Float"
 
 ---
 
 ## 10. Theme
 
-Dark theme defined in `src/utils/theme.js` (GitHub-inspired dark colors):
+Dark theme defined in `src/utils/theme.js`:
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `background` | `#0d1117` | Screen background |
-| `surface` | `#161b22` | Card/tile background |
-| `border` | `#30363d` | Card borders |
-| `text` | `#c9d1d9` | Primary text |
-| `textMuted` | `#8b949e` | Secondary / label text |
-| `green` | `#3fb950` | On, charging, OK |
-| `orange` | `#d29922` | Warning, discharging |
-| `red` | `#f85149` | Error, critical |
-| `blue` | `#58a6ff` | Accent, standby |
-| `gold` | `#e3b341` | Solar |
-| `teal` | `#39d353` | Float state |
+| `bg` | `#0d0d0d` | Screen background |
+| `bgElevated` | `#1c1c1e` | Card/sheet background |
+| `bgCard` | `#1a1a1a` | Nested card background |
+| `border` | `#2e2e2e` | Card borders |
+| `text` | `#ffffff` | Primary text |
+| `textMuted` | `#888` | Secondary text |
+| `accent` | `#4b8eff` | Primary action/accent |
+| `green` | `#4ae183` | OK/on/charging |
+| `solar` | `#ffb84a` | Warning/solar |
+| `red` | `#ff453a` | Error/critical |

@@ -75,13 +75,12 @@ It connects to Clayton Power LPS / BMS units via CAN bus, displays live telemetr
 ### Prerequisites
 
 - ESP-IDF v6.0 installed at `C:\esp\v6.0\esp-idf`
-- Espressif tools at `C:\Espressif\tools\`
 
 ### Build Steps
 
 ```powershell
 # 1. Load ESP-IDF environment
-. "C:\Espressif\tools\Microsoft.v6.0.PowerShell_profile.ps1"
+. "C:\esp\v6.0\esp-idf\export.ps1"
 
 # 2. Navigate to project
 cd "ESP32-S3-Touch-LCD-5-Demo\ESP-IDF\09_CAN_HMI"

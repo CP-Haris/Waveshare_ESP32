@@ -99,13 +99,12 @@ class BleService {
 
       try {
         await device.requestConnectionPriority(ConnectionPriority.High);
-        console.log('[BLE] Connection priority set to high');
       } catch (error) {
         console.warn('[BLE] Connection priority request failed:', error.message);
       }
 
       device.onDisconnected((error) => {
-        console.log('[BLE] Disconnected', error?.message);
+        if (error?.message) console.warn('[BLE] Disconnected:', error.message);
         this.device = null;
         this._subscription?.remove();
         this._subscription = null;

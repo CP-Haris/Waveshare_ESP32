@@ -27,7 +27,7 @@ The app keeps the active unit as global app-side state exposed by the header uni
 
 ## Unit discovery
 
-Units are discovered from source addresses seen on CAN frames. The app requests identification over CAN with `0x18EAFFFE`, then decodes `0x19FF00`, `0x19FF03`, and `0x19FF04` responses for serial number and part number.
+Units are discovered from source addresses seen on CAN frames. The app requests identification over CAN with `0x18EAFFFE`, then decodes `0x19FF00`, `0x19FF03`, and `0x19FF04` responses for serial number and part number. Serial broadcasts include version-like bytes in `data[0..2]`; the app-visible serial number is decoded from `data[3..7]` as `XXXXXX-XXXX`.
 
 Part numbers classify units:
 

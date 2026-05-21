@@ -48,7 +48,7 @@ Consists of two components: an ESP32-S3 touchscreen HMI running on the CAN bus, 
 
 ```powershell
 # Load ESP-IDF environment
-. "C:\Espressif\tools\Microsoft.v6.0.PowerShell_profile.ps1"
+. "C:\esp\v6.0\esp-idf\export.ps1"
 
 # Navigate to project
 cd "ESP32-S3-Touch-LCD-5-Demo\ESP-IDF\09_CAN_HMI"

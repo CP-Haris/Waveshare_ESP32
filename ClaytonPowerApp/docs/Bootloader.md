@@ -180,7 +180,7 @@ Når Firmware Update-skærmen åbnes:
 7. Appen henter firmware catalog fra backend for target partnumber.
 8. Appen bygger update-plan per bridge/modul.
 
-Update-planen viser kun moduler der har en kendt aktuel firmwareversion. For hvert modul vælger appen nyeste compatible firmware i samme hardware/family-linje som den installerede version. Det forhindrer automatisk hop mellem inkompatible versionfamilier.
+Update-planen er produktbaseret: CB/Battery viser kun bridge 1, mens CL/LPS viser bridge 1-4. Hvis en CL/LPS bridge ikke svarer på version request, vises den som `Cannot update` i stedet for at blive skjult. For moduler med en kendt aktuel firmwareversion vælger appen nyeste compatible firmware i samme hardware/family-linje som den installerede version. Det forhindrer automatisk hop mellem inkompatible versionfamilier.
 
 ## Selve update-flowet
 
@@ -309,7 +309,6 @@ Firmware Update-skærmen bruger teksten `Uploading block X/Y` til at vise packag
 | `src/services/firmwareUpdateService.js` | Discovery, update-plan, bootloader state machine, CAN/BLE transport, retry og cleanup. |
 | `src/utils/protocol.js` | BLE command encoders/decoders, inkl. CAN frame og CAN frame batching. |
 | ESP32 `09_CAN_HMI` firmware | BLE gateway og CAN forwarding. |
-| `CANBootloader_Core` | C# referenceimplementation og protokoldokumentation. |
 
 ## Ting man ikke bør ændre uden hardwaretest
 

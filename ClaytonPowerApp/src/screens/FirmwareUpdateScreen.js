@@ -70,10 +70,12 @@ export default function FirmwareUpdateScreen({ route }) {
 
     for (const item of updatePlan) {
       if (item.status === 'updatable') updatable += 1;
+      else if (item.status === 'unavailable') continue;
       else upToDate += 1;
     }
 
-    return { updatable, upToDate };
+    const unavailable = updatePlan.filter((item) => item.status === 'unavailable').length;
+    return { updatable, upToDate, unavailable };
   }, [updatePlan]);
 
   const canStart = useMemo(() => {
@@ -330,21 +332,36 @@ export default function FirmwareUpdateScreen({ route }) {
                       <Text style={[styles.targetPlanSummary, { color: colors.accent }]}>Can update: {planSummary.updatable}</Text>
                       <Text style={styles.targetPlanSummarySep}>|</Text>
                       <Text style={[styles.targetPlanSummary, { color: colors.green }]}>Latest installed: {planSummary.upToDate}</Text>
+                      {planSummary.unavailable > 0 && (
+                        <>
+                          <Text style={styles.targetPlanSummarySep}>|</Text>
+                          <Text style={[styles.targetPlanSummary, { color: colors.textMuted }]}>Cannot update: {planSummary.unavailable}</Text>
+                        </>
+                      )}
                     </View>
 
                     {updatePlan.map((item) => {
                       const isUpdatable = item.status === 'updatable';
+                      const isUnavailable = item.status === 'unavailable';
                       const moduleName = getModuleName(target.partNumber || partFromRoute, item.bridgeId);
-                      const statusLabel = isUpdatable ? 'Can update' : 'Latest installed';
+                      const statusLabel = isUpdatable
+                        ? 'Can update'
+                        : isUnavailable
+                          ? 'Cannot update'
+                          : 'Latest installed';
                       const statusColor = isUpdatable
                         ? colors.accent
+                        : isUnavailable
+                          ? colors.textMuted
                         : colors.green;
                       const statusIcon = isUpdatable
                         ? 'system-update'
+                        : isUnavailable
+                          ? 'block'
                         : 'check-circle';
 
                       return (
-                        <View key={`bridge-${item.bridgeId}`} style={styles.bridgeRow}>
+                        <View key={`bridge-${item.bridgeId}`} style={[styles.bridgeRow, isUnavailable && styles.bridgeRowUnavailable]}>
                           <View style={styles.bridgeRowTop}>
                             <Text style={styles.bridgeTitle}>{moduleName}</Text>
                             <View style={styles.bridgeStatusWrap}>
@@ -353,16 +370,24 @@ export default function FirmwareUpdateScreen({ route }) {
                             </View>
                           </View>
 
-                          <Text style={styles.bridgeLine}>Current version: v{item.currentVersionString}</Text>
-                          <Text style={styles.bridgeLine}>
-                            {isUpdatable
-                              ? `Target version: v${item.targetVersionString || item.latestVersionString}`
-                              : `Target version: v${item.targetVersionString || item.currentVersionString}`}
-                          </Text>
+                          {isUnavailable ? (
+                            <Text style={styles.bridgeLine}>Current version: no response</Text>
+                          ) : (
+                            <>
+                              <Text style={styles.bridgeLine}>Current version: v{item.currentVersionString}</Text>
+                              <Text style={styles.bridgeLine}>
+                                {isUpdatable
+                                  ? `Target version: v${item.targetVersionString || item.latestVersionString}`
+                                  : `Target version: v${item.targetVersionString || item.currentVersionString}`}
+                              </Text>
+                            </>
+                          )}
                           <Text style={styles.bridgeHint}>
                             {isUpdatable
                               ? 'This module can be updated now.'
-                              : 'Latest installed.'}
+                              : isUnavailable
+                                ? 'No version response from this bridge.'
+                                : 'Latest installed.'}
                           </Text>
                         </View>
                       );
@@ -508,6 +533,7 @@ const styles = StyleSheet.create({
   targetPlanSummaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: spacing.sm,
   },
@@ -524,6 +550,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginBottom: spacing.sm,
   },
+  bridgeRowUnavailable: { borderColor: colors.border, backgroundColor: colors.bgInset },
   bridgeRowTop: {
     flexDirection: 'row',
     alignItems: 'center',

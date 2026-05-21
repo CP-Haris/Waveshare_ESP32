@@ -78,6 +78,10 @@ const FIRMWARE_VERSION_REQUESTS = [
   { bridgeId: 3, block: 9, id: 1 },
   { bridgeId: 4, block: 9, id: 2 },
 ];
+const BRIDGE_IDS_BY_PART_PREFIX = {
+  CB: [1],
+  CL: [1, 2, 3, 4],
+};
 
 const NO_SERIAL_VALUE = 25757575755;
 const NO_SERIAL_BYTES = [25, 75, 75, 75, 55];
@@ -113,6 +117,11 @@ function comparableVersionInt(item) {
   }
 
   return raw;
+}
+
+function bridgeIdsForPartNumber(partNumber) {
+  const prefix = String(partNumber || '').trim().toUpperCase().slice(0, 2);
+  return BRIDGE_IDS_BY_PART_PREFIX[prefix] || FIRMWARE_VERSION_REQUESTS.map((request) => request.bridgeId);
 }
 
 function crc16Boot(data, from = 1, len = data.length) {
@@ -895,7 +904,7 @@ class FirmwareUpdateService {
     return targets;
   }
 
-  _buildBridgeUpdatePlan(firmwareItems, bridgeFirmwareVersions) {
+  _buildBridgeUpdatePlan(firmwareItems, bridgeFirmwareVersions, partNumber) {
     const byBridge = new Map();
     for (const item of firmwareItems || []) {
       const bridgeId = normalizeBridgeId(item?.bridgeId);
@@ -909,10 +918,25 @@ class FirmwareUpdateService {
     }
 
     const rows = [];
-    for (let bridgeId = 1; bridgeId <= MAX_SUPPORTED_BRIDGE_ID; bridgeId++) {
+    for (const bridgeId of bridgeIdsForPartNumber(partNumber)) {
       const currentRaw = bridgeFirmwareVersions?.[bridgeId] ?? bridgeFirmwareVersions?.[String(bridgeId)] ?? 0;
       const currentVersionInt = Number(currentRaw);
-      if (!Number.isFinite(currentVersionInt) || currentVersionInt <= 0) continue;
+      if (!Number.isFinite(currentVersionInt) || currentVersionInt <= 0) {
+        rows.push({
+          bridgeId,
+          currentVersionInt: 0,
+          currentVersionString: '',
+          latestVersionInt: 0,
+          latestVersionString: '',
+          latestAnyVersionInt: 0,
+          latestAnyVersionString: '',
+          status: 'unavailable',
+          statusText: 'Cannot update',
+          targetVersionString: '',
+          updateAvailable: false,
+        });
+        continue;
+      }
 
       const allForBridge = (byBridge.get(bridgeId) || [])
         .slice()
@@ -1070,7 +1094,7 @@ class FirmwareUpdateService {
       partNumber: normalizedPart,
     });
 
-    return this._buildBridgeUpdatePlan(firmwareItems, bridgeFirmwareVersions || {});
+    return this._buildBridgeUpdatePlan(firmwareItems, bridgeFirmwareVersions || {}, normalizedPart);
   }
 
   async runFirmwareUpdate({

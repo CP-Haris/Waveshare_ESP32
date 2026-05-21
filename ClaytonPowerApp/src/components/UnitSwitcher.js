@@ -17,14 +17,11 @@ function unitKind(unit) {
   return 'Unit';
 }
 
-function canAddressLabel(unit) {
-  if (!Number.isFinite(unit?.addr)) return `#${unit?.index ?? '-'}`;
-  return (unit.addr & 0xff).toString(16).toUpperCase().padStart(2, '0');
-}
-
 function unitLabel(unit) {
   if (!unit) return 'Select unit';
-  return `${unitKind(unit)} ${canAddressLabel(unit)}`;
+  const primary = String(unit.partNumber || '').trim() || unitKind(unit);
+  const serial = String(unit.serial || '').trim();
+  return [primary, serial].filter(Boolean).join(' ');
 }
 
 export default function UnitSwitcher() {

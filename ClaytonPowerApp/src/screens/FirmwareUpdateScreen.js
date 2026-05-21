@@ -12,6 +12,7 @@ import { colors, spacing, fontSize, radius } from '../utils/theme';
 import ScreenHeader from '../components/ScreenHeader';
 import firmwareUpdateService from '../services/firmwareUpdateService';
 import bleService from '../services/bleService';
+import canGatewayService from '../services/canGatewayService';
 
 const DEFAULT_API_BASE = 'http://49.12.206.181/firmware-api';
 const DEFAULT_API_KEY = 'ff871ffebf04c37e60bafbc9dfcca0fdaec9d82b20d0febf351bf0819b457f10';
@@ -51,6 +52,7 @@ export default function FirmwareUpdateScreen({ route }) {
   const [transferTotal, setTransferTotal] = useState(0);
   const [result, setResult] = useState(null);
   const abortRef = useRef(null);
+  const selectedUnitIndexRef = useRef(canGatewayService.getActiveUnitInfo()?.index ?? null);
 
   const transferPercent = useMemo(() => {
     if (transferTotal <= 0) return 0;
@@ -87,6 +89,16 @@ export default function FirmwareUpdateScreen({ route }) {
     }
   }, []);
 
+  const getTargetPreferences = useCallback(() => {
+    const activeUnit = canGatewayService.getActiveUnitInfo();
+    const activeCanId = Number.isFinite(activeUnit?.addr) ? activeUnit.addr : null;
+    return {
+      preferredCanId: canIdFromRoute ?? activeCanId ?? null,
+      preferredPartNumber: partFromRoute || '',
+      preferredSerialNumber: serialFromRoute || activeUnit?.serial || '',
+    };
+  }, [canIdFromRoute, partFromRoute, serialFromRoute]);
+
   const detectTarget = useCallback(async () => {
     if (!bleService.isConnected) {
       setTarget(null);
@@ -101,11 +113,7 @@ export default function FirmwareUpdateScreen({ route }) {
     setPlanError('');
 
     try {
-      const detected = await firmwareUpdateService.detectTarget({
-        preferredCanId: canIdFromRoute ?? null,
-        preferredPartNumber: partFromRoute || '',
-        preferredSerialNumber: serialFromRoute || '',
-      });
+      const detected = await firmwareUpdateService.detectTarget(getTargetPreferences());
 
       setTarget(detected);
 
@@ -133,7 +141,33 @@ export default function FirmwareUpdateScreen({ route }) {
     } finally {
       setTargetLoading(false);
     }
-  }, [canIdFromRoute, partFromRoute, serialFromRoute]);
+  }, [getTargetPreferences]);
+
+  useEffect(() => {
+    const syncSelectedUnit = () => {
+      const nextIndex = canGatewayService.getActiveUnitInfo()?.index ?? null;
+      if (selectedUnitIndexRef.current === nextIndex) return;
+
+      selectedUnitIndexRef.current = nextIndex;
+      setTarget(null);
+      setUpdatePlan([]);
+      setPlanError('');
+
+      if (!bleService.isConnected) return;
+      if (nextIndex == null) {
+        setTargetError('Select a unit in the header before scanning');
+        return;
+      }
+      if (!running && !targetLoading) detectTarget();
+    };
+
+    const unsub = canGatewayService.onNotification((message) => {
+      if (message.type === 'unitInfo' || message.type === 'dashboard') syncSelectedUnit();
+    });
+
+    syncSelectedUnit();
+    return unsub;
+  }, [detectTarget, running, targetLoading]);
 
   useEffect(() => {
     const unsub = bleService.onConnectionChange((isConnected) => {
@@ -172,9 +206,10 @@ export default function FirmwareUpdateScreen({ route }) {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    const resolvedCanId = canIdFromRoute ?? target?.applicationCanId ?? null;
+    const targetPreferences = getTargetPreferences();
+    const resolvedCanId = canIdFromRoute ?? target?.applicationCanId ?? targetPreferences.preferredCanId ?? null;
     const resolvedPartNumber = (partFromRoute || target?.partNumber || '').trim();
-    const resolvedSerial = (serialFromRoute || target?.serialNumber || '').trim();
+    const resolvedSerial = (serialFromRoute || target?.serialNumber || targetPreferences.preferredSerialNumber || '').trim();
 
     try {
       let successCount = 0;
@@ -281,6 +316,7 @@ export default function FirmwareUpdateScreen({ route }) {
 
         {target ? (
           <>
+            <Text style={styles.targetLine}>CAN ID: {target.applicationCanId != null ? `0x${Number(target.applicationCanId).toString(16).toUpperCase().padStart(2, '0')}` : '-'}</Text>
             <Text style={styles.targetLine}>Part Number: {target.partNumber || '-'}</Text>
             <Text style={styles.targetLine}>Serial: {target.serialNumber || '-'}</Text>
 

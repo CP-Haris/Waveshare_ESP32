@@ -553,9 +553,10 @@ class FirmwareUpdateService {
     );
   }
 
-  async _scanForHeartbeat(expectedSerial, durationMs, onLog) {
+  async _scanForHeartbeat(expectedCanId, expectedSerial, durationMs, onLog) {
     const deadline = Date.now() + durationMs;
     let fallback = null;
+    const expectedUnitId = expectedCanId == null ? null : Number(expectedCanId) & 0xff;
 
     while (Date.now() < deadline) {
       let frame;
@@ -574,12 +575,17 @@ class FirmwareUpdateService {
       const unitId = frame.canId & 0xff;
       const candidate = { unitId, serial, productId: d[5] & 0xff, bridgeId: d[6] & 0xff };
       await this._ackHeartbeat(unitId, d);
+      const canMatches = expectedUnitId == null || unitId === expectedUnitId;
 
       if (expectedSerial != null && serial === expectedSerial) {
         onLog?.(`Pre-scan: already in bootloader (CAN ${unitId})`);
         return candidate;
       }
-      if (!fallback) fallback = candidate;
+      if (canMatches && (expectedSerial == null || serial === NO_SERIAL_VALUE)) {
+        onLog?.(`Pre-scan: already in bootloader (CAN ${unitId})`);
+        return candidate;
+      }
+      if (canMatches && !fallback) fallback = candidate;
     }
     return fallback;
   }
@@ -955,14 +961,22 @@ class FirmwareUpdateService {
     if (preferredCanId != null) {
       const hit = targets.find((t) => t.applicationCanId === Number(preferredCanId));
       if (hit) return hit;
-    }
-    if (preferredPartNumber) {
-      const hit = targets.find((t) => eqIgnoreCase(t.partNumber, preferredPartNumber));
-      if (hit) return hit;
+
+      if (preferredSerialNumber) {
+        const hint = digitsOnly(preferredSerialNumber);
+        const serialHit = targets.find((t) => digitsOnly(t.serialNumber) === hint);
+        if (serialHit) return serialHit;
+      }
+
+      return null;
     }
     if (preferredSerialNumber) {
       const hint = digitsOnly(preferredSerialNumber);
       const hit = targets.find((t) => digitsOnly(t.serialNumber) === hint);
+      if (hit) return hit;
+    }
+    if (preferredPartNumber) {
+      const hit = targets.find((t) => eqIgnoreCase(t.partNumber, preferredPartNumber));
       if (hit) return hit;
     }
     return targets.find((t) => t.partNumber || t.serialNumber) || targets[0];
@@ -1142,7 +1156,7 @@ class FirmwareUpdateService {
 
       checkCancel();
       report(8, 'Scanning for existing bootloader heartbeat...');
-      heartbeat = await this._scanForHeartbeat(expectedSerialNum, HEARTBEAT_PRESCAN_MS, onLog);
+      heartbeat = await this._scanForHeartbeat(resolvedCanId, expectedSerialNum, HEARTBEAT_PRESCAN_MS, onLog);
 
       if (!heartbeat) {
         let lastErr = null;

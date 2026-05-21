@@ -653,7 +653,7 @@ typedef struct {
 //  Unit Table — multi-device discovery and tracking
 // ---------------------------------------------------------------------------
 #define UNIT_TABLE_SIZE     8
-#define UNIT_OFFLINE_MS     5000
+#define UNIT_OFFLINE_MS     3000
 #define UNIT_FREE_MS        60000
 
 typedef enum {
@@ -684,9 +684,22 @@ static lps_data_t lps_empty_ = {0};
 static lps_data_t *lps_ptr_ = &lps_empty_;
 #define lps (*lps_ptr_)
 
+static bool unit_is_online_idx(int idx)
+{
+    return idx >= 0 && idx < UNIT_TABLE_SIZE && unit_table[idx].status == UNIT_ONLINE;
+}
+
+static int unit_first_online(void)
+{
+    for (int i = 0; i < UNIT_TABLE_SIZE; i++) {
+        if (unit_table[i].status == UNIT_ONLINE) return i;
+    }
+    return -1;
+}
+
 static void select_unit(int idx)
 {
-    if (idx >= 0 && idx < UNIT_TABLE_SIZE && unit_table[idx].status != UNIT_NULL) {
+    if (unit_is_online_idx(idx)) {
         selected_unit = idx;
         lps_ptr_ = &unit_table[idx].data;
         can_target_addr = unit_table[idx].can_addr;
@@ -734,7 +747,7 @@ static int unit_online_count(void)
 {
     int n = 0;
     for (int i = 0; i < UNIT_TABLE_SIZE; i++)
-        if (unit_table[i].status != UNIT_NULL) n++;
+        if (unit_table[i].status == UNIT_ONLINE) n++;
     return n;
 }
 
@@ -748,16 +761,15 @@ static void unit_offline_tick(void)
             unit_table[i].status = UNIT_OFFLINE;
             unit_table[i].data.connected = false;
             ESP_LOGW(TAG, "Unit #%d (addr 0x%02X) OFFLINE", i, unit_table[i].can_addr);
+            if (selected_unit == i) {
+                select_unit(unit_first_online());
+            }
         }
         if (unit_table[i].status == UNIT_OFFLINE && elapsed >= UNIT_FREE_MS) {
             ESP_LOGI(TAG, "Unit #%d (addr 0x%02X) FREED", i, unit_table[i].can_addr);
             unit_table[i].status = UNIT_NULL;
             if (selected_unit == i) {
-                int next = -1;
-                for (int j = 0; j < UNIT_TABLE_SIZE; j++) {
-                    if (unit_table[j].status != UNIT_NULL) { next = j; break; }
-                }
-                select_unit(next);
+                select_unit(unit_first_online());
             }
         }
     }
@@ -769,7 +781,7 @@ static void select_prev_unit(void)
     int start = (selected_unit < 0) ? 0 : selected_unit;
     for (int i = 1; i < UNIT_TABLE_SIZE; i++) {
         int idx = (start - i + UNIT_TABLE_SIZE) % UNIT_TABLE_SIZE;
-        if (unit_table[idx].status != UNIT_NULL) { select_unit(idx); return; }
+        if (unit_table[idx].status == UNIT_ONLINE) { select_unit(idx); return; }
     }
 }
 
@@ -779,7 +791,7 @@ static void select_next_unit(void)
     int start = (selected_unit < 0) ? 0 : selected_unit;
     for (int i = 1; i < UNIT_TABLE_SIZE; i++) {
         int idx = (start + i) % UNIT_TABLE_SIZE;
-        if (unit_table[idx].status != UNIT_NULL) { select_unit(idx); return; }
+        if (unit_table[idx].status == UNIT_ONLINE) { select_unit(idx); return; }
     }
 }
 
@@ -1292,7 +1304,6 @@ static lv_obj_t *lbl_soc_pct;
 static lv_obj_t *lbl_time_left;
 static lv_obj_t *lbl_batt_info;
 static lv_obj_t *btn_settings;
-static lv_obj_t *btn_ble_status;
 static lv_obj_t *ble_status_icon;
 static lv_obj_t *btn_inv_toggle;
 static lv_obj_t *lbl_inv_toggle;
@@ -1762,7 +1773,6 @@ static void rebuild_settings_grid(void);
 static void show_ble_pin_popup(uint32_t ble_pin);
 
 static void btn_settings_cb(lv_event_t *e) { (void)e; buzzer_click(); show_page(PAGE_SETTINGS_GRID); }
-static void btn_ble_status_cb(lv_event_t *e) { (void)e; buzzer_click(); show_ble_pin_popup(ble_gateway_get_passkey()); }
 static void ble_pin_close_cb(lv_event_t *e) { (void)e; buzzer_click(); if (ble_pin_popup) lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN); }
 static void btn_grid_back_cb(lv_event_t *e) { (void)e; buzzer_click(); show_page(PAGE_DASHBOARD); }
 
@@ -2513,6 +2523,10 @@ static void btn_dev_next_cb(lv_event_t *e)
 
 static void update_device_selector(void)
 {
+    if (!unit_is_online_idx(selected_unit)) {
+        select_unit(unit_first_online());
+    }
+
     int count = unit_online_count();
     if (count <= 1) {
         lv_obj_add_flag(dev_sel_container, LV_OBJ_FLAG_HIDDEN);
@@ -2522,7 +2536,7 @@ static void update_device_selector(void)
 
     int unit_num = 0, pos = 0;
     for (int i = 0; i < UNIT_TABLE_SIZE; i++) {
-        if (unit_table[i].status != UNIT_NULL) {
+        if (unit_table[i].status == UNIT_ONLINE) {
             pos++;
             if (i == selected_unit) unit_num = pos;
         }
@@ -2532,10 +2546,13 @@ static void update_device_selector(void)
     if (selected_unit >= 0) {
         unit_entry_t *u = &unit_table[selected_unit];
         if (u->id_complete && u->part_number[0]) {
-            if (u->serial_str[0])
-                snprintf(buf, sizeof(buf), "%d/%d %s (%s)", unit_num, count, u->part_number, u->serial_str);
-            else
+            if (u->serial_str[0]) {
+                const char *short_serial = strchr(u->serial_str, '-');
+                short_serial = short_serial ? short_serial + 1 : u->serial_str;
+                snprintf(buf, sizeof(buf), "%d/%d %s (%s)", unit_num, count, u->part_number, short_serial);
+            } else {
                 snprintf(buf, sizeof(buf), "%d/%d %s", unit_num, count, u->part_number);
+            }
         } else {
             snprintf(buf, sizeof(buf), "%d/%d (0x%02X)", unit_num, count, u->can_addr);
         }
@@ -2572,7 +2589,7 @@ static void create_dashboard(lv_obj_t *parent)
     lv_arc_set_bg_angles(arc_soc, 0, 270);
     lv_arc_set_range(arc_soc, 0, 100);
     lv_arc_set_value(arc_soc, 0);
-    lv_obj_align(arc_soc, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_align(arc_soc, LV_ALIGN_TOP_MID, 0, 62);
     lv_obj_remove_style(arc_soc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc_soc, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_arc_color(arc_soc, COL_SOC_BG, LV_PART_MAIN);
@@ -2586,21 +2603,21 @@ static void create_dashboard(lv_obj_t *parent)
     lv_label_set_text(lbl_soc_pct, "--%");
     lv_obj_set_style_text_color(lbl_soc_pct, COL_TEXT, 0);
     lv_obj_set_style_text_font(lbl_soc_pct, &lv_font_montserrat_48, 0);
-    lv_obj_align(lbl_soc_pct, LV_ALIGN_TOP_MID, 0, 150);
+    lv_obj_align(lbl_soc_pct, LV_ALIGN_TOP_MID, 0, 202);
 
     // Time left
     lbl_time_left = lv_label_create(page_dashboard);
     lv_label_set_text(lbl_time_left, "-- min");
     lv_obj_set_style_text_color(lbl_time_left, COL_TEXT_DIM, 0);
     lv_obj_set_style_text_font(lbl_time_left, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_time_left, LV_ALIGN_TOP_MID, 0, 210);
+    lv_obj_align(lbl_time_left, LV_ALIGN_TOP_MID, 0, 262);
 
     // Battery voltage + current
     lbl_batt_info = lv_label_create(page_dashboard);
     lv_label_set_text(lbl_batt_info, "--.- V   --.- A");
     lv_obj_set_style_text_color(lbl_batt_info, COL_TEXT_DIM, 0);
     lv_obj_set_style_text_font(lbl_batt_info, &lv_font_montserrat_20, 0);
-    lv_obj_align(lbl_batt_info, LV_ALIGN_TOP_MID, 0, 400);
+    lv_obj_align(lbl_batt_info, LV_ALIGN_TOP_MID, 0, 452);
 
     // Toggle buttons
     btn_inv_toggle = lv_btn_create(page_dashboard);
@@ -2633,22 +2650,12 @@ static void create_dashboard(lv_obj_t *parent)
     lv_obj_center(lbl_dcout_toggle);
     lv_obj_add_event_cb(btn_dcout_toggle, btn_dcout_toggle_cb, LV_EVENT_CLICKED, NULL);
 
-    // Bluetooth and settings actions (top-right)
-    btn_ble_status = lv_btn_create(page_dashboard);
-    lv_obj_set_size(btn_ble_status, 48, 48);
-    lv_obj_align(btn_ble_status, LV_ALIGN_TOP_RIGHT, -74, 12);
-    lv_obj_set_style_bg_color(btn_ble_status, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn_ble_status, 24, 0);
-    lv_obj_set_style_border_width(btn_ble_status, 1, 0);
-    lv_obj_set_style_border_color(btn_ble_status, lv_color_hex(0x30363d), 0);
-    lv_obj_set_style_shadow_width(btn_ble_status, 12, 0);
-    lv_obj_set_style_shadow_color(btn_ble_status, lv_color_hex(0x05080c), 0);
-    ble_status_icon = lv_label_create(btn_ble_status);
+    // Bluetooth status (top-left)
+    ble_status_icon = lv_label_create(page_dashboard);
     lv_label_set_text(ble_status_icon, LV_SYMBOL_BLUETOOTH);
     lv_obj_set_style_text_color(ble_status_icon, lv_color_hex(0x555555), 0);
-    lv_obj_set_style_text_font(ble_status_icon, &lv_font_montserrat_20, 0);
-    lv_obj_center(ble_status_icon);
-    lv_obj_add_event_cb(btn_ble_status, btn_ble_status_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_style_text_font(ble_status_icon, &lv_font_montserrat_24, 0);
+    lv_obj_align(ble_status_icon, LV_ALIGN_TOP_LEFT, 86, 22);
 
     btn_settings = lv_btn_create(page_dashboard);
     lv_obj_set_size(btn_settings, 48, 48);
@@ -3585,6 +3592,9 @@ void can_hmi_task(void *arg)
                 if (ble_gateway_is_connected()) {
                     lv_obj_set_style_text_color(ble_status_icon,
                         lv_color_hex(0x2196F3), 0); // blue = connected
+                    if (ble_pin_popup) {
+                        lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
+                    }
                 } else {
                     lv_obj_set_style_text_color(ble_status_icon,
                         lv_color_hex(0x555555), 0); // grey = disconnected

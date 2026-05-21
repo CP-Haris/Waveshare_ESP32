@@ -1258,7 +1258,6 @@ static void decode_can_message(uint32_t can_id, uint8_t *data, uint8_t len)
 #define COL_BG_DARK    lv_color_hex(0x0d1117)
 #define COL_BG_PANEL   lv_color_hex(0x161b22)
 #define COL_BG_CARD    lv_color_hex(0x21262d)
-#define COL_BG_SOFT    lv_color_hex(0x0b1620)
 #define COL_ACCENT     lv_color_hex(0x00b4d8)
 #define COL_GREEN      lv_color_hex(0x3fb950)
 #define COL_ORANGE     lv_color_hex(0xd29922)
@@ -1332,6 +1331,8 @@ static lv_obj_t *error_popup_code;
 // BLE pairing popup
 static lv_obj_t *ble_pin_popup;
 static lv_obj_t *ble_pin_label;
+static volatile bool ble_pairing_popup_requested = false;
+static volatile uint32_t ble_pairing_popup_passkey = 0;
 
 // Settings detail
 static lv_obj_t *detail_content;
@@ -1758,9 +1759,10 @@ static void open_editor(setting_t *s)
 static void show_page(page_t p);
 static void open_category(int cat_idx);
 static void rebuild_settings_grid(void);
+static void show_ble_pin_popup(uint32_t ble_pin);
 
 static void btn_settings_cb(lv_event_t *e) { (void)e; buzzer_click(); show_page(PAGE_SETTINGS_GRID); }
-static void btn_ble_status_cb(lv_event_t *e) { (void)e; buzzer_click(); if (ble_pin_popup) lv_obj_clear_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN); }
+static void btn_ble_status_cb(lv_event_t *e) { (void)e; buzzer_click(); show_ble_pin_popup(ble_gateway_get_passkey()); }
 static void ble_pin_close_cb(lv_event_t *e) { (void)e; buzzer_click(); if (ble_pin_popup) lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN); }
 static void btn_grid_back_cb(lv_event_t *e) { (void)e; buzzer_click(); show_page(PAGE_DASHBOARD); }
 
@@ -2347,6 +2349,17 @@ static void show_error_popup(uint8_t code)
     lv_obj_clear_flag(error_popup, LV_OBJ_FLAG_HIDDEN);
 }
 
+static void show_ble_pin_popup(uint32_t ble_pin)
+{
+    if (!ble_pin_popup) return;
+
+    if (ble_pin_label) {
+        lv_label_set_text_fmt(ble_pin_label, "%06lu", (unsigned long)ble_pin);
+    }
+    lv_obj_clear_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(ble_pin_popup);
+}
+
 static void create_ble_pin_popup(lv_obj_t *parent, uint32_t ble_pin)
 {
     ble_pin_popup = lv_obj_create(parent);
@@ -2551,20 +2564,6 @@ static void create_dashboard(lv_obj_t *parent)
     lv_obj_align(page_dashboard, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_clear_flag(page_dashboard, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(page_dashboard, LV_OBJ_FLAG_CLICKABLE);
-
-    lv_obj_t *soc_panel = lv_obj_create(page_dashboard);
-    lv_obj_set_size(soc_panel, 470, 470);
-    lv_obj_align(soc_panel, LV_ALIGN_TOP_MID, 0, -18);
-    lv_obj_set_style_bg_color(soc_panel, COL_BG_SOFT, 0);
-    lv_obj_set_style_bg_opa(soc_panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(soc_panel, 36, 0);
-    lv_obj_set_style_border_width(soc_panel, 1, 0);
-    lv_obj_set_style_border_color(soc_panel, lv_color_hex(0x1f6f82), 0);
-    lv_obj_set_style_shadow_width(soc_panel, 26, 0);
-    lv_obj_set_style_shadow_color(soc_panel, lv_color_hex(0x020609), 0);
-    lv_obj_set_style_pad_all(soc_panel, 0, 0);
-    lv_obj_clear_flag(soc_panel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(soc_panel, LV_OBJ_FLAG_CLICKABLE);
 
     // SOC Arc — dominant, centered
     arc_soc = lv_arc_create(page_dashboard);
@@ -3354,6 +3353,14 @@ static void ble_cmd_handler(uint8_t cmd, const uint8_t *payload, uint16_t len)
     }
 }
 
+static void ble_pairing_handler(uint32_t pairing_passkey)
+{
+    ble_pairing_popup_passkey = pairing_passkey;
+    ble_pairing_popup_requested = true;
+    pwr_last_touch_ms = now_ms();
+    pwr_force_wake_request = true;
+}
+
 // ---------------------------------------------------------------------------
 //  Public API — called from main.c
 // ---------------------------------------------------------------------------
@@ -3371,6 +3378,7 @@ void can_hmi_init(void)
     show_page(PAGE_DASHBOARD);
 
     // --- BLE Gateway ---
+    ble_gateway_set_pairing_callback(ble_pairing_handler);
     uint32_t ble_pin = ble_gateway_init();
     ble_gateway_set_cmd_callback(ble_cmd_handler);
     create_ble_pin_popup(scr, ble_pin);
@@ -3556,6 +3564,13 @@ void can_hmi_task(void *arg)
                             }
                         }
                     }
+
+                }
+
+                if (ble_pairing_popup_requested) {
+                    uint32_t pairing_pin = ble_pairing_popup_passkey;
+                    ble_pairing_popup_requested = false;
+                    show_ble_pin_popup(pairing_pin);
                 }
 
                 lvgl_port_unlock();

@@ -15,6 +15,7 @@
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "host/ble_hs.h"
+#include "host/ble_store.h"
 #include "host/util/util.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
@@ -47,7 +48,10 @@ static uint16_t tx_attr_handle;
 static bool     client_subscribed = false;
 static uint32_t passkey = 0;
 static ble_cmd_callback_t cmd_callback = NULL;
+static ble_pairing_callback_t pairing_callback = NULL;
 static bool ble_ready = false;
+
+void ble_store_config_init(void);
 
 #define BLE_RX_MAX_LEN 256
 
@@ -155,6 +159,10 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             conn_handle = event->connect.conn_handle;
             // Phone will initiate MTU exchange — we just set preferred MTU
             ble_att_set_preferred_mtu(256);
+            int rc = ble_gap_security_initiate(conn_handle);
+            if (rc != 0) {
+                ESP_LOGW(TAG, "security initiate failed rc=%d", rc);
+            }
         } else {
             start_advertise();
         }
@@ -181,11 +189,13 @@ static int gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
-            // Display passkey on LCD
             struct ble_sm_io pk = {
                 .action = BLE_SM_IOACT_DISP,
                 .passkey = passkey,
             };
+            if (pairing_callback) {
+                pairing_callback(passkey);
+            }
             ble_sm_inject_io(event->passkey.conn_handle, &pk);
             ESP_LOGI(TAG, "Passkey display: %06lu", (unsigned long)passkey);
         }
@@ -195,6 +205,15 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "Encryption %s",
                  event->enc_change.status == 0 ? "enabled" : "failed");
         break;
+
+    case BLE_GAP_EVENT_REPEAT_PAIRING: {
+        struct ble_gap_conn_desc desc;
+        int rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
+        if (rc == 0) {
+            ble_store_util_delete_peer(&desc.peer_id_addr);
+        }
+        return BLE_GAP_REPEAT_PAIRING_RETRY;
+    }
 
     default:
         break;
@@ -272,8 +291,8 @@ static void on_sync(void)
     ble_hs_cfg.sm_bonding = 1;
     ble_hs_cfg.sm_mitm = 1;
     ble_hs_cfg.sm_sc = 1;
-    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC;
-    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC;
+    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
 
     // Passkey is delivered via BLE_SM_IOACT_DISP in gap_event handler
 
@@ -334,6 +353,9 @@ uint32_t ble_gateway_init(void)
     // Host callbacks
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.reset_cb = on_reset;
+    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+
+    ble_store_config_init();
 
     // Start NimBLE host task
     nimble_port_freertos_init(nimble_host_task);
@@ -373,4 +395,9 @@ uint32_t ble_gateway_get_passkey(void)
 void ble_gateway_set_cmd_callback(ble_cmd_callback_t cb)
 {
     cmd_callback = cb;
+}
+
+void ble_gateway_set_pairing_callback(ble_pairing_callback_t cb)
+{
+    pairing_callback = cb;
 }

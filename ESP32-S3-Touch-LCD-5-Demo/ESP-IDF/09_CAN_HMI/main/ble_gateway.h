@@ -61,6 +61,9 @@ uint32_t ble_gateway_get_passkey(void);
 typedef void (*ble_cmd_callback_t)(uint8_t cmd, const uint8_t *payload, uint16_t len);
 void ble_gateway_set_cmd_callback(ble_cmd_callback_t cb);
 
+typedef void (*ble_pairing_callback_t)(uint32_t passkey);
+void ble_gateway_set_pairing_callback(ble_pairing_callback_t cb);
+
 #ifdef __cplusplus
 }
 #endif

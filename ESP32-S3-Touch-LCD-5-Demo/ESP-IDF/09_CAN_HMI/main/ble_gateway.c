@@ -122,13 +122,15 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
                 .uuid = &tx_chr_uuid.u,
                 .access_cb = gatt_tx_access,
                 .val_handle = &tx_attr_handle,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_AUTHEN |
+                         BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_NOTIFY_INDICATE_AUTHEN,
             },
             {
                 // RX — Write (Phone → ESP32)
                 .uuid = &rx_chr_uuid.u,
                 .access_cb = gatt_rx_access,
-                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP |
+                         BLE_GATT_CHR_F_WRITE_AUTHEN,
             },
             { 0 }, // terminator
         },

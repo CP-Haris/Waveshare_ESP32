@@ -32,6 +32,7 @@ export default function ConnectScreen() {
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState([]);
   const [connecting, setConnecting] = useState(null);
+  const [connectError, setConnectError] = useState(null);
   const [connected, setConnected] = useState(bleService.isConnected);
   const [connectedDeviceName, setConnectedDeviceName] = useState(null);
 
@@ -45,6 +46,7 @@ export default function ConnectScreen() {
   const startScan = async () => {
     const ok = await requestPermissions();
     if (!ok) return;
+    setConnectError(null);
     setScanning(true);
     setDevices([]);
     const found = await bleService.scan(5000);
@@ -54,7 +56,11 @@ export default function ConnectScreen() {
 
   const connectDevice = async (deviceId) => {
     setConnecting(deviceId);
-    await bleService.connect(deviceId);
+    setConnectError(null);
+    const ok = await bleService.connect(deviceId);
+    if (!ok) {
+      setConnectError('Pairing failed. Enter the BLE PIN shown on the display when Android asks for it.');
+    }
     setConnecting(null);
   };
 
@@ -133,6 +139,13 @@ export default function ConnectScreen() {
         </TouchableOpacity>
       </View>
       <View style={styles.sectionDivider} />
+
+      {connectError && (
+        <View style={styles.errorCard}>
+          <MaterialIcons name="lock" size={18} color={colors.red} />
+          <Text style={styles.errorText}>{connectError}</Text>
+        </View>
+      )}
 
       {devices.length > 0 ? (
         <FlatList
@@ -220,6 +233,22 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.borderSubtle,
     marginBottom: spacing.sm,
+  },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.redBg,
+    borderWidth: 1,
+    borderColor: colors.red,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.sm,
   },
   list: { flex: 1 },
   deviceCard: {

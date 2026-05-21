@@ -113,6 +113,7 @@ class BleService {
       });
 
       await device.discoverAllServicesAndCharacteristics();
+      await device.readCharacteristicForService(BLE_SERVICE_UUID, BLE_TX_CHAR_UUID);
 
       this._subscription = device.monitorCharacteristicForService(
         BLE_SERVICE_UUID,
@@ -137,7 +138,16 @@ class BleService {
       return true;
     } catch (error) {
       console.error('[BLE] Connect error:', error.message);
+      if (this.device) {
+        try {
+          await this.device.cancelConnection();
+        } catch (disconnectError) {
+          // device may already be disconnected
+        }
+      }
       this.device = null;
+      this._subscription?.remove();
+      this._subscription = null;
       this._emitConnection(false);
       return false;
     }

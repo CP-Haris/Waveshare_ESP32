@@ -1258,6 +1258,7 @@ static void decode_can_message(uint32_t can_id, uint8_t *data, uint8_t len)
 #define COL_BG_DARK    lv_color_hex(0x0d1117)
 #define COL_BG_PANEL   lv_color_hex(0x161b22)
 #define COL_BG_CARD    lv_color_hex(0x21262d)
+#define COL_BG_SOFT    lv_color_hex(0x0b1620)
 #define COL_ACCENT     lv_color_hex(0x00b4d8)
 #define COL_GREEN      lv_color_hex(0x3fb950)
 #define COL_ORANGE     lv_color_hex(0xd29922)
@@ -1292,6 +1293,8 @@ static lv_obj_t *lbl_soc_pct;
 static lv_obj_t *lbl_time_left;
 static lv_obj_t *lbl_batt_info;
 static lv_obj_t *btn_settings;
+static lv_obj_t *btn_ble_status;
+static lv_obj_t *ble_status_icon;
 static lv_obj_t *btn_inv_toggle;
 static lv_obj_t *lbl_inv_toggle;
 static lv_obj_t *btn_dcout_toggle;
@@ -1325,6 +1328,10 @@ static lv_obj_t *error_popup_title;
 static lv_obj_t *error_popup_desc;
 static lv_obj_t *error_popup_level;
 static lv_obj_t *error_popup_code;
+
+// BLE pairing popup
+static lv_obj_t *ble_pin_popup;
+static lv_obj_t *ble_pin_label;
 
 // Settings detail
 static lv_obj_t *detail_content;
@@ -1753,6 +1760,8 @@ static void open_category(int cat_idx);
 static void rebuild_settings_grid(void);
 
 static void btn_settings_cb(lv_event_t *e) { (void)e; buzzer_click(); show_page(PAGE_SETTINGS_GRID); }
+static void btn_ble_status_cb(lv_event_t *e) { (void)e; buzzer_click(); if (ble_pin_popup) lv_obj_clear_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN); }
+static void ble_pin_close_cb(lv_event_t *e) { (void)e; buzzer_click(); if (ble_pin_popup) lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN); }
 static void btn_grid_back_cb(lv_event_t *e) { (void)e; buzzer_click(); show_page(PAGE_DASHBOARD); }
 
 static void btn_detail_back_cb(lv_event_t *e)
@@ -2338,6 +2347,54 @@ static void show_error_popup(uint8_t code)
     lv_obj_clear_flag(error_popup, LV_OBJ_FLAG_HIDDEN);
 }
 
+static void create_ble_pin_popup(lv_obj_t *parent, uint32_t ble_pin)
+{
+    ble_pin_popup = lv_obj_create(parent);
+    lv_obj_set_size(ble_pin_popup, 470, 300);
+    lv_obj_center(ble_pin_popup);
+    lv_obj_set_style_bg_color(ble_pin_popup, lv_color_hex(0x101820), 0);
+    lv_obj_set_style_bg_opa(ble_pin_popup, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(ble_pin_popup, 2, 0);
+    lv_obj_set_style_border_color(ble_pin_popup, COL_ACCENT, 0);
+    lv_obj_set_style_radius(ble_pin_popup, 18, 0);
+    lv_obj_set_style_pad_all(ble_pin_popup, 22, 0);
+    lv_obj_set_style_shadow_width(ble_pin_popup, 28, 0);
+    lv_obj_set_style_shadow_color(ble_pin_popup, lv_color_hex(0x020609), 0);
+    lv_obj_clear_flag(ble_pin_popup, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *title = lv_label_create(ble_pin_popup);
+    lv_label_set_text(title, LV_SYMBOL_BLUETOOTH "  BLE PIN");
+    lv_obj_set_style_text_color(title, COL_ACCENT, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
+
+    ble_pin_label = lv_label_create(ble_pin_popup);
+    lv_label_set_text_fmt(ble_pin_label, "%06lu", (unsigned long)ble_pin);
+    lv_obj_set_style_text_color(ble_pin_label, COL_TEXT, 0);
+    lv_obj_set_style_text_font(ble_pin_label, &lv_font_montserrat_48, 0);
+    lv_obj_align(ble_pin_label, LV_ALIGN_TOP_MID, 0, 68);
+
+    lv_obj_t *hint = lv_label_create(ble_pin_popup);
+    lv_label_set_text(hint, "Enter this PIN on the phone when pairing.");
+    lv_obj_set_width(hint, 390);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(hint, COL_TEXT_DIM, 0);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_16, 0);
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 132);
+
+    lv_obj_t *btn_close = lv_btn_create(ble_pin_popup);
+    lv_obj_set_size(btn_close, 180, 50);
+    lv_obj_align(btn_close, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_obj_set_style_bg_color(btn_close, COL_BG_CARD, 0);
+    lv_obj_set_style_radius(btn_close, 14, 0);
+    lv_obj_t *lbl_close = lv_label_create(btn_close);
+    lv_label_set_text(lbl_close, LV_SYMBOL_CLOSE "  Close");
+    lv_obj_set_style_text_font(lbl_close, &lv_font_montserrat_16, 0);
+    lv_obj_center(lbl_close);
+    lv_obj_add_event_cb(btn_close, ble_pin_close_cb, LV_EVENT_CLICKED, NULL);
+}
+
 static bool check_for_error_popup(void)
 {
     for (int i = 0; i < 8; i++) {
@@ -2495,6 +2552,20 @@ static void create_dashboard(lv_obj_t *parent)
     lv_obj_clear_flag(page_dashboard, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(page_dashboard, LV_OBJ_FLAG_CLICKABLE);
 
+    lv_obj_t *soc_panel = lv_obj_create(page_dashboard);
+    lv_obj_set_size(soc_panel, 470, 470);
+    lv_obj_align(soc_panel, LV_ALIGN_TOP_MID, 0, -18);
+    lv_obj_set_style_bg_color(soc_panel, COL_BG_SOFT, 0);
+    lv_obj_set_style_bg_opa(soc_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(soc_panel, 36, 0);
+    lv_obj_set_style_border_width(soc_panel, 1, 0);
+    lv_obj_set_style_border_color(soc_panel, lv_color_hex(0x1f6f82), 0);
+    lv_obj_set_style_shadow_width(soc_panel, 26, 0);
+    lv_obj_set_style_shadow_color(soc_panel, lv_color_hex(0x020609), 0);
+    lv_obj_set_style_pad_all(soc_panel, 0, 0);
+    lv_obj_clear_flag(soc_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(soc_panel, LV_OBJ_FLAG_CLICKABLE);
+
     // SOC Arc — dominant, centered
     arc_soc = lv_arc_create(page_dashboard);
     lv_obj_set_size(arc_soc, 380, 380);
@@ -2537,9 +2608,11 @@ static void create_dashboard(lv_obj_t *parent)
     lv_obj_set_size(btn_inv_toggle, 300, 56);
     lv_obj_align(btn_inv_toggle, LV_ALIGN_BOTTOM_LEFT, 100, -16);
     lv_obj_set_style_bg_color(btn_inv_toggle, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn_inv_toggle, 10, 0);
-    lv_obj_set_style_border_width(btn_inv_toggle, 2, 0);
-    lv_obj_set_style_border_color(btn_inv_toggle, COL_TEXT_DIM, 0);
+    lv_obj_set_style_radius(btn_inv_toggle, 16, 0);
+    lv_obj_set_style_border_width(btn_inv_toggle, 1, 0);
+    lv_obj_set_style_border_color(btn_inv_toggle, lv_color_hex(0x3a4654), 0);
+    lv_obj_set_style_shadow_width(btn_inv_toggle, 16, 0);
+    lv_obj_set_style_shadow_color(btn_inv_toggle, lv_color_hex(0x05080c), 0);
     lbl_inv_toggle = lv_label_create(btn_inv_toggle);
     lv_label_set_text(lbl_inv_toggle, LV_SYMBOL_POWER " INVERTER");
     lv_obj_set_style_text_font(lbl_inv_toggle, &lv_font_montserrat_20, 0);
@@ -2550,21 +2623,41 @@ static void create_dashboard(lv_obj_t *parent)
     lv_obj_set_size(btn_dcout_toggle, 300, 56);
     lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_RIGHT, -100, -16);
     lv_obj_set_style_bg_color(btn_dcout_toggle, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn_dcout_toggle, 10, 0);
-    lv_obj_set_style_border_width(btn_dcout_toggle, 2, 0);
-    lv_obj_set_style_border_color(btn_dcout_toggle, COL_TEXT_DIM, 0);
+    lv_obj_set_style_radius(btn_dcout_toggle, 16, 0);
+    lv_obj_set_style_border_width(btn_dcout_toggle, 1, 0);
+    lv_obj_set_style_border_color(btn_dcout_toggle, lv_color_hex(0x3a4654), 0);
+    lv_obj_set_style_shadow_width(btn_dcout_toggle, 16, 0);
+    lv_obj_set_style_shadow_color(btn_dcout_toggle, lv_color_hex(0x05080c), 0);
     lbl_dcout_toggle = lv_label_create(btn_dcout_toggle);
     lv_label_set_text(lbl_dcout_toggle, LV_SYMBOL_DOWNLOAD " DC OUT");
     lv_obj_set_style_text_font(lbl_dcout_toggle, &lv_font_montserrat_20, 0);
     lv_obj_center(lbl_dcout_toggle);
     lv_obj_add_event_cb(btn_dcout_toggle, btn_dcout_toggle_cb, LV_EVENT_CLICKED, NULL);
 
-    // Settings gear (top-right)
+    // Bluetooth and settings actions (top-right)
+    btn_ble_status = lv_btn_create(page_dashboard);
+    lv_obj_set_size(btn_ble_status, 48, 48);
+    lv_obj_align(btn_ble_status, LV_ALIGN_TOP_RIGHT, -74, 12);
+    lv_obj_set_style_bg_color(btn_ble_status, COL_BG_CARD, 0);
+    lv_obj_set_style_radius(btn_ble_status, 24, 0);
+    lv_obj_set_style_border_width(btn_ble_status, 1, 0);
+    lv_obj_set_style_border_color(btn_ble_status, lv_color_hex(0x30363d), 0);
+    lv_obj_set_style_shadow_width(btn_ble_status, 12, 0);
+    lv_obj_set_style_shadow_color(btn_ble_status, lv_color_hex(0x05080c), 0);
+    ble_status_icon = lv_label_create(btn_ble_status);
+    lv_label_set_text(ble_status_icon, LV_SYMBOL_BLUETOOTH);
+    lv_obj_set_style_text_color(ble_status_icon, lv_color_hex(0x555555), 0);
+    lv_obj_set_style_text_font(ble_status_icon, &lv_font_montserrat_20, 0);
+    lv_obj_center(ble_status_icon);
+    lv_obj_add_event_cb(btn_ble_status, btn_ble_status_cb, LV_EVENT_CLICKED, NULL);
+
     btn_settings = lv_btn_create(page_dashboard);
     lv_obj_set_size(btn_settings, 48, 48);
-    lv_obj_align(btn_settings, LV_ALIGN_TOP_RIGHT, -10, 8);
+    lv_obj_align(btn_settings, LV_ALIGN_TOP_RIGHT, -14, 12);
     lv_obj_set_style_bg_color(btn_settings, COL_ACCENT, 0);
     lv_obj_set_style_radius(btn_settings, 24, 0);
+    lv_obj_set_style_shadow_width(btn_settings, 14, 0);
+    lv_obj_set_style_shadow_color(btn_settings, lv_color_hex(0x003541), 0);
     lv_obj_t *gear = lv_label_create(btn_settings);
     lv_label_set_text(gear, LV_SYMBOL_SETTINGS);
     lv_obj_set_style_text_font(gear, &lv_font_montserrat_24, 0);
@@ -2573,11 +2666,11 @@ static void create_dashboard(lv_obj_t *parent)
 
     // Device selector
     dev_sel_container = lv_obj_create(page_dashboard);
-    lv_obj_set_size(dev_sel_container, 300, 40);
-    lv_obj_align(dev_sel_container, LV_ALIGN_TOP_MID, 0, 8);
+    lv_obj_set_size(dev_sel_container, 340, 44);
+    lv_obj_align(dev_sel_container, LV_ALIGN_TOP_MID, 0, 14);
     lv_obj_set_style_bg_color(dev_sel_container, COL_BG_CARD, 0);
     lv_obj_set_style_bg_opa(dev_sel_container, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(dev_sel_container, 20, 0);
+    lv_obj_set_style_radius(dev_sel_container, 22, 0);
     lv_obj_set_style_border_width(dev_sel_container, 1, 0);
     lv_obj_set_style_border_color(dev_sel_container, lv_color_hex(0x30363d), 0);
     lv_obj_set_style_pad_all(dev_sel_container, 0, 0);
@@ -2644,11 +2737,13 @@ static void create_dashboard(lv_obj_t *parent)
 
     // Error warning badge (top-left)
     btn_error_badge = lv_btn_create(page_dashboard);
-    lv_obj_set_size(btn_error_badge, 50, 44);
-    lv_obj_align(btn_error_badge, LV_ALIGN_TOP_LEFT, 10, 8);
+    lv_obj_set_size(btn_error_badge, 54, 48);
+    lv_obj_align(btn_error_badge, LV_ALIGN_TOP_LEFT, 14, 12);
     lv_obj_set_style_bg_color(btn_error_badge, COL_RED, 0);
-    lv_obj_set_style_radius(btn_error_badge, 8, 0);
+    lv_obj_set_style_radius(btn_error_badge, 16, 0);
     lv_obj_set_style_border_width(btn_error_badge, 0, 0);
+    lv_obj_set_style_shadow_width(btn_error_badge, 14, 0);
+    lv_obj_set_style_shadow_color(btn_error_badge, lv_color_hex(0x330a0a), 0);
     lbl_error_badge = lv_label_create(btn_error_badge);
     lv_label_set_text(lbl_error_badge, LV_SYMBOL_WARNING);
     lv_obj_set_style_text_font(lbl_error_badge, &lv_font_montserrat_20, 0);
@@ -3259,10 +3354,6 @@ static void ble_cmd_handler(uint8_t cmd, const uint8_t *payload, uint16_t len)
     }
 }
 
-// BLE status indicator on dashboard
-static lv_obj_t *ble_status_icon = NULL;
-static lv_obj_t *ble_pin_label   = NULL;
-
 // ---------------------------------------------------------------------------
 //  Public API — called from main.c
 // ---------------------------------------------------------------------------
@@ -3282,19 +3373,7 @@ void can_hmi_init(void)
     // --- BLE Gateway ---
     uint32_t ble_pin = ble_gateway_init();
     ble_gateway_set_cmd_callback(ble_cmd_handler);
-
-    // Create BLE status icon + PIN label on dashboard (top-right area)
-    ble_status_icon = lv_label_create(scr);
-    lv_label_set_text(ble_status_icon, LV_SYMBOL_BLUETOOTH);
-    lv_obj_set_style_text_color(ble_status_icon, lv_color_hex(0x555555), 0);
-    lv_obj_set_style_text_font(ble_status_icon, &lv_font_montserrat_20, 0);
-    lv_obj_align(ble_status_icon, LV_ALIGN_TOP_RIGHT, -10, 8);
-
-    ble_pin_label = lv_label_create(scr);
-    lv_label_set_text_fmt(ble_pin_label, "BLE PIN: %06lu", (unsigned long)ble_pin);
-    lv_obj_set_style_text_color(ble_pin_label, lv_color_hex(0xAAAAAA), 0);
-    lv_obj_set_style_text_font(ble_pin_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(ble_pin_label, LV_ALIGN_TOP_RIGHT, -40, 10);
+    create_ble_pin_popup(scr, ble_pin);
 
     ESP_LOGI(TAG, "CAN HMI UI initialized (1024x600), BLE PIN=%06lu", (unsigned long)ble_pin);
 }

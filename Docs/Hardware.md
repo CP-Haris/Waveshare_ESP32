@@ -232,6 +232,6 @@ An external transceiver (e.g., SN65HVD230 or MCP2551) is required between GPIO 1
 
 ### Waveshare Demo Black Screen (ESP-IDF 6.0 Bootloader)
 
-Pre-built Waveshare demo binary (`08_lvgl_Porting`) shows black screen when flashed alongside the ESP-IDF v6.0 bootloader.  
+Historically, the pre-built Waveshare demo binary (`08_lvgl_Porting`) showed a black screen when flashed alongside the ESP-IDF v6.0 bootloader.  
 **Root cause**: The demo was compiled with ESP-IDF 5.2; the bootloader format changed between 5.x and 6.0.  
-**Workaround**: Would need to build the 08_lvgl_Porting project from source with ESP-IDF 5.2.
+**Status**: No longer relevant — the Waveshare demo/example projects have been removed from the workspace. The production firmware (`ClaytonDisplay/`) builds and flashes cleanly with ESP-IDF v6.0.

@@ -9,7 +9,7 @@ Consists of two components: an ESP32-S3 touchscreen HMI running on the CAN bus, 
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| **ESP32 CAN HMI Firmware** | `ESP32-S3-Touch-LCD-5-Demo/ESP-IDF/09_CAN_HMI/` | ESP-IDF firmware for the 5" touchscreen dashboard |
+| **ESP32 CAN HMI Firmware** | `ClaytonDisplay/` | ESP-IDF firmware for the 5" touchscreen dashboard |
 | **Clayton Power App** | `ClaytonPowerApp/` | React Native Expo app for Android/iOS |
 
 ---
@@ -51,7 +51,7 @@ Consists of two components: an ESP32-S3 touchscreen HMI running on the CAN bus, 
 . "C:\esp\v6.0\esp-idf\export.ps1"
 
 # Navigate to project
-cd "ESP32-S3-Touch-LCD-5-Demo\ESP-IDF\09_CAN_HMI"
+cd "ClaytonDisplay"
 
 # Build + flash (COM11)
 idf.py -p COM11 flash monitor

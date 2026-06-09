@@ -1,7 +1,7 @@
 # ESP32 CAN HMI Firmware
 
 ESP-IDF firmware for the Clayton Power LPS touchscreen dashboard.  
-**Path**: `ESP32-S3-Touch-LCD-5-Demo/ESP-IDF/09_CAN_HMI/`
+**Path**: `ClaytonDisplay/`
 
 ---
 
@@ -39,14 +39,17 @@ It connects to Clayton Power LPS / BMS units via CAN bus, displays live telemetr
 ## 2. File Structure
 
 ```
-09_CAN_HMI/
+ClaytonDisplay/
 ├── CMakeLists.txt            # Root build file (requires ESP-IDF component path)
 ├── sdkconfig.defaults        # Pre-configured build settings (flash, PSRAM, BLE, etc.)
 ├── partitions.csv            # Custom partition table (if present)
 └── main/
     ├── CMakeLists.txt        # Sources list
     ├── Kconfig.projbuild     # Menuconfig definitions (bounce buffer height, etc.)
+    ├── idf_component.yml     # Managed component dependencies (LVGL, touch drivers)
+    ├── main.c                # app_main entry point, wake-cause handling, init
     ├── can_hmi.c             # Main application (~3500 lines)
+    ├── can_hmi.h             # Public HMI API, data model, settings declarations
     ├── ble_gateway.c         # NimBLE GATT server and raw CAN notification transport
     ├── ble_gateway.h         # BLE API and raw gateway message/command IDs
     ├── waveshare_rgb_lcd_port.c  # LCD panel init, I2C CH422G helpers
@@ -83,7 +86,7 @@ It connects to Clayton Power LPS / BMS units via CAN bus, displays live telemetr
 . "C:\esp\v6.0\esp-idf\export.ps1"
 
 # 2. Navigate to project
-cd "ESP32-S3-Touch-LCD-5-Demo\ESP-IDF\09_CAN_HMI"
+cd "ClaytonDisplay"
 
 # 3. Build
 idf.py build

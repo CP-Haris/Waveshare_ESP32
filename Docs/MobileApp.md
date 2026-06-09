@@ -55,6 +55,7 @@ ClaytonPowerApp/
 │   ├── services/
 │   │   ├── bleService.js         # BLE singleton (scan, connect, notify)
 │   │   ├── canGatewayService.js  # App-side raw CAN parser and sender
+│   │   ├── firmwareUpdateHelpers.js # Bootloader frame/CRC helpers and parsing
 │   │   └── firmwareUpdateService.js # Bootloader transport/update state machine
 │   └── utils/
 │       ├── protocol.js           # Binary encode/decode

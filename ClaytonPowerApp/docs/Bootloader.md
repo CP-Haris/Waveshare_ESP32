@@ -308,7 +308,7 @@ Firmware Update-skærmen bruger teksten `Uploading block X/Y` til at vise packag
 | `src/screens/FirmwareUpdateScreen.js` | UI, targetvisning, module labels, start/cancel, progress/result. |
 | `src/services/firmwareUpdateService.js` | Discovery, update-plan, bootloader state machine, CAN/BLE transport, retry og cleanup. |
 | `src/utils/protocol.js` | BLE command encoders/decoders, inkl. CAN frame og CAN frame batching. |
-| ESP32 `09_CAN_HMI` firmware | BLE gateway og CAN forwarding. |
+| ESP32 `ClaytonDisplay` firmware | BLE gateway og CAN forwarding. |
 
 ## Ting man ikke bør ændre uden hardwaretest
 

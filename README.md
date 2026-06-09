@@ -6,7 +6,7 @@ Workspace for the Clayton Power ESP32-S3 CAN HMI firmware and the companion Reac
 
 | Component | Path | Purpose |
 | --- | --- | --- |
-| ESP32 CAN HMI | `ESP32-S3-Touch-LCD-5-Demo/ESP-IDF/09_CAN_HMI/` | ESP-IDF firmware for the Waveshare ESP32-S3 5 inch touch display, local LVGL UI, CAN decoding, and raw CAN-over-BLE gateway. |
+| ESP32 CAN HMI | `ClaytonDisplay/` | ESP-IDF firmware for the Waveshare ESP32-S3 5 inch touch display, local LVGL UI, CAN decoding, and raw CAN-over-BLE gateway. |
 | ClaytonPowerApp | `ClaytonPowerApp/` | Expo/React Native app for BLE connection, dashboard, settings, error overview, and CAN bootloader firmware update. |
 | Docs | `Docs/` and `ClaytonPowerApp/docs/` | System overview, firmware notes, mobile app architecture, CAN gateway, and bootloader details. |
 
@@ -16,7 +16,7 @@ Workspace for the Clayton Power ESP32-S3 CAN HMI firmware and the companion Reac
 
 ```powershell
 . "C:\esp\v6.0\esp-idf\export.ps1"
-cd "ESP32-S3-Touch-LCD-5-Demo\ESP-IDF\09_CAN_HMI"
+cd "ClaytonDisplay"
 idf.py build
 idf.py -p COM11 flash monitor
 ```

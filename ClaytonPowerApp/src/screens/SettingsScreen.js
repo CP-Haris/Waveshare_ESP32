@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, fontSize, radius } from '../utils/theme';
+import { unitFamily } from '../utils/units';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
 import ScreenHeader from '../components/ScreenHeader';
@@ -141,12 +142,7 @@ function getFastStep(def) {
 }
 
 function normalizeUnitKind(type, partNumber) {
-  const pn = (partNumber || '').toUpperCase();
-  if (pn.startsWith('CL')) return UNIT_KIND.LPS;
-  if (pn.startsWith('CB')) return UNIT_KIND.BMS;
-  if (type === 2) return UNIT_KIND.BMS;
-  if (type === 1) return UNIT_KIND.LPS;
-  return UNIT_KIND.LPS;
+  return unitFamily({ type, partNumber }) === 'bms' ? UNIT_KIND.BMS : UNIT_KIND.LPS;
 }
 
 export default function SettingsScreen() {

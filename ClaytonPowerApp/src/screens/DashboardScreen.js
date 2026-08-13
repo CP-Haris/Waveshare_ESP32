@@ -12,13 +12,11 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, fontSize } from '../utils/theme';
 import { ERROR_LEVEL, activeErrorDefinitions } from '../utils/errorCodes';
+import { unitFamily } from '../utils/units';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
 import ScreenHeader from '../components/ScreenHeader';
 import SocRing from '../components/SocRing';
-
-const DEV_LPS = 1;
-const DEV_BMS = 2;
 
 const FAIL_LABELS = {
   4: 'Blocked by error',
@@ -39,21 +37,6 @@ function formatPower(watts) {
 
 function formatFixed(value, decimals) {
   return finiteNumber(value).toFixed(decimals);
-}
-
-function productFamily(dashboard) {
-  const partNumber = String(dashboard.partNumber || '').toUpperCase();
-  if (partNumber.startsWith('CB')) return 'battery';
-  if (partNumber.startsWith('CL')) return 'lps';
-  if (dashboard.unitType === DEV_BMS) return 'battery';
-  return 'lps';
-}
-
-function unitTypeLabel(dashboard) {
-  const family = productFamily(dashboard);
-  if (family === 'battery') return 'Battery';
-  if (dashboard.unitType === DEV_LPS || family === 'lps') return 'LPS';
-  return 'CAN Unit';
 }
 
 function stateLabel(state, failCode) {
@@ -183,8 +166,7 @@ export default function DashboardScreen() {
   }
 
   const dashboard = data;
-  const family = productFamily(dashboard);
-  const isBatteryProduct = family === 'battery';
+  const isBatteryProduct = unitFamily({ type: dashboard.unitType, partNumber: dashboard.partNumber }) === 'bms';
   const pct = Math.max(0, Math.min(100, dashboard.soc));
   const timeStr = dashboard.socTimeMin > 0
     ? `${Math.floor(dashboard.socTimeMin / 60)}h ${String(dashboard.socTimeMin % 60).padStart(2, '0')}m`
@@ -313,7 +295,7 @@ export default function DashboardScreen() {
       <View style={[styles.heroPanel, statusOk ? styles.heroPanelOk : styles.heroPanelAlert]}>
         <View style={styles.heroTopRow}>
           <View>
-            <Text style={styles.overline}>{unitTypeLabel(dashboard)}</Text>
+            <Text style={styles.overline}>{isBatteryProduct ? 'Battery' : 'LPS'}</Text>
             <Text style={styles.heroTitle}>{chargeMode}</Text>
             <Text style={styles.heroSubtitle}>{statusOk ? 'System stable' : 'Attention required'}</Text>
           </View>
@@ -373,19 +355,7 @@ export default function DashboardScreen() {
         </View>
         <View style={styles.systemsGrid}>
           {systemCards.map((item) => (
-            <SystemMetricCard
-              key={item.key}
-              icon={item.icon}
-              label={item.label}
-              value={item.value}
-              unit={item.unit}
-              detail={item.detail}
-              active={item.active}
-              fail={item.fail}
-              stateText={item.stateText}
-              accentColor={item.accentColor}
-              wide={item.wide}
-            />
+            <SystemMetricCard key={item.key} {...item} />
           ))}
         </View>
       </View>

@@ -1,5 +1,6 @@
 import bleService from './bleService';
 import { encodeSendCanFrame, encodeSetCanPassthrough } from '../utils/protocol';
+import { DEV_UNKNOWN, DEV_LPS, DEV_BMS, unitFamily } from '../utils/units';
 
 const CAN_DISPLAY_ADDR = 0xfe;
 const CAN_ID_INFO_BROADCAST = 0x18eafffe;
@@ -19,10 +20,6 @@ const FUNC_DCOUT_ID = 159;
 const ERROR_CLEAR_BLOCK = 1;
 const ERROR_CLEAR_ID = 252;
 const ERROR_CLEAR_VALUE = 1234;
-
-const DEV_UNKNOWN = 0;
-const DEV_LPS = 1;
-const DEV_BMS = 2;
 
 const Q16_ONE = 65536;
 
@@ -521,10 +518,8 @@ class CanGatewayService {
   }
 
   _classifyUnit(unit) {
-    const partNumber = String(unit.partNumber || '').toUpperCase();
-    if (partNumber.startsWith('CL')) unit.type = DEV_LPS;
-    else if (partNumber.startsWith('CB')) unit.type = DEV_BMS;
-    else unit.type = DEV_UNKNOWN;
+    const family = unitFamily({ partNumber: unit.partNumber });
+    unit.type = family === 'lps' ? DEV_LPS : family === 'bms' ? DEV_BMS : DEV_UNKNOWN;
     unit.data.unitType = unit.type;
   }
 

@@ -2,18 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, fontSize, spacing } from '../utils/theme';
+import { unitFamily } from '../utils/units';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
 
-const DEV_LPS = 1;
-const DEV_BMS = 2;
-
 function unitKind(unit) {
-  const partNumber = String(unit?.partNumber || '').toUpperCase();
-  if (partNumber.startsWith('CB')) return 'Battery';
-  if (partNumber.startsWith('CL')) return 'LPS';
-  if (unit?.type === DEV_BMS) return 'Battery';
-  if (unit?.type === DEV_LPS) return 'LPS';
+  const family = unitFamily(unit || {});
+  if (family === 'bms') return 'Battery';
+  if (family === 'lps') return 'LPS';
   return 'Unit';
 }
 

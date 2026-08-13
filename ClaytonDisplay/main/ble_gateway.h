@@ -51,9 +51,10 @@ void ble_gateway_send_can_frame(uint32_t can_id, const uint8_t *data, uint8_t dl
 bool ble_gateway_is_connected(void);
 
 /**
- * Get the current passkey for display on LCD.
+ * Standby mode: advertise slowly (800-1000ms) to save power while the display
+ * sleeps; false restores fast advertising (100-150ms). No-op while connected.
  */
-uint32_t ble_gateway_get_passkey(void);
+void ble_gateway_set_standby(bool standby);
 
 // ---------------------------------------------------------------------------
 //  Callback — called from BLE RX to be handled by can_hmi

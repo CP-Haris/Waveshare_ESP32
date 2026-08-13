@@ -8,10 +8,22 @@
 #pragma once
 
 #include "lvgl.h"
+#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Install and start the TWAI (CAN) driver, if it is not already up.
+ *
+ * The driver is torn down completely during standby — twai_stop() alone keeps
+ * an ESP_PM_APB_FREQ_MAX lock that prevents light sleep — so ownership of the
+ * bus lifecycle lives here rather than in app_main().
+ *
+ * @return ESP_OK if the bus is running.
+ */
+esp_err_t can_hmi_bus_start(void);
 
 /**
  * @brief Initialize the CAN HMI UI (create all pages/widgets).

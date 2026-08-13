@@ -12,25 +12,23 @@
 #include "esp_lcd_types.h"
 #include "esp_lcd_touch.h"
 #include "lvgl.h"
+#include "ui_screen.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define ESP_PANEL_USE_1024_600_LCD           (1)     // 0: 800x480, 1: 1024x600
+// Panel choice lives in ui_screen.h (UI_PANEL_1024_600) so the UI layer, the
+// LCD driver and the PC simulator all read the same switch. Do not edit here.
+#define ESP_PANEL_USE_1024_600_LCD           UI_PANEL_1024_600  // 0: 800x480, 1: 1024x600
 #define CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911 1 // 1 initiates the touch, 0 closes the touch.
 
 /**
  * LVGL related parameters, can be adjusted by users
  *
  */
-#if ESP_PANEL_USE_1024_600_LCD 
-    #define LVGL_PORT_H_RES             (1024)
-    #define LVGL_PORT_V_RES             (600)
-#else
-    #define LVGL_PORT_H_RES             (800)
-    #define LVGL_PORT_V_RES             (480)
-#endif
+#define LVGL_PORT_H_RES             (SCREEN_W)
+#define LVGL_PORT_V_RES             (SCREEN_H)
 #define LVGL_PORT_TICK_PERIOD_MS    (CONFIG_EXAMPLE_LVGL_PORT_TICK)
 
 /**
@@ -171,6 +169,13 @@ void lvgl_port_suspend(void);
  * @brief Resume the LVGL task after a suspend.
  */
 void lvgl_port_resume(void);
+
+/**
+ * @brief Rebind LVGL to a recreated RGB panel: updates the panel handle and
+ *        the draw-buffer framebuffer pointers, then forces a full redraw.
+ *        Call with the LVGL mutex held (and the LVGL task suspended).
+ */
+void lvgl_port_rebind_panel(esp_lcd_panel_handle_t panel_handle);
 
 #ifdef __cplusplus
 }

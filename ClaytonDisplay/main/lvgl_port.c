@@ -471,6 +471,11 @@ static void tick_increment(void *arg)
     lv_tick_inc(LVGL_PORT_TICK_PERIOD_MS); // Increment the LVGL tick count
 }
 
+// Kept at file scope so standby can stop it: a 2 ms periodic esp_timer caps
+// how long FreeRTOS tickless idle may sleep, which makes automatic light sleep
+// pointless (the wake overhead alone is longer than the sleep).
+static esp_timer_handle_t lvgl_tick_timer = NULL;
+
 static esp_err_t tick_init(void)
 {
     // Tick interface for LVGL (using esp_timer to generate 2ms periodic event)
@@ -478,7 +483,6 @@ static esp_err_t tick_init(void)
         .callback = &tick_increment, // Set the callback function for the timer
         .name = "LVGL tick" // Name of the timer
     };
-    esp_timer_handle_t lvgl_tick_timer = NULL; // Timer handle
     ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer)); // Create the timer
     return esp_timer_start_periodic(lvgl_tick_timer, LVGL_PORT_TICK_PERIOD_MS * 1000); // Start the timer
 }
@@ -557,6 +561,29 @@ void lvgl_port_unlock(void)
     xSemaphoreGiveRecursive(lvgl_mux); // Release the mutex
 }
 
+void lvgl_port_rebind_panel(esp_lcd_panel_handle_t panel_handle)
+{
+    lv_disp_t *disp = lv_disp_get_default();
+    if (!disp || !panel_handle) return;
+
+    lv_disp_drv_t *drv = disp->driver;
+    drv->user_data = panel_handle;
+
+#if LVGL_PORT_AVOID_TEAR_ENABLE && (LVGL_PORT_LCD_RGB_BUFFER_NUMS == 2)
+    // Direct/full-refresh modes render straight into the panel's framebuffers,
+    // which were freed and reallocated — rebind the draw buffer to the new ones.
+    void *buf1 = NULL;
+    void *buf2 = NULL;
+    ESP_ERROR_CHECK(esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 2, &buf1, &buf2));
+    drv->draw_buf->buf1 = buf1;
+    drv->draw_buf->buf2 = buf2;
+    drv->draw_buf->buf_act = buf1;
+#endif
+
+    // New framebuffers hold no image — force a full redraw of the screen
+    lv_obj_invalidate(lv_scr_act());
+}
+
 void lvgl_port_suspend(void)
 {
     if (lvgl_task_handle) {
@@ -565,10 +592,21 @@ void lvgl_port_suspend(void)
         lvgl_port_unlock();
         ESP_LOGI(TAG, "LVGL task suspended");
     }
+    // Stop the 2 ms tick. Nothing consumes lv_tick while the task is suspended,
+    // and leaving it running would wake the CPU 500 times a second — far more
+    // often than the wake overhead can be amortised, so the power manager would
+    // never actually enter light sleep.
+    if (lvgl_tick_timer) {
+        esp_timer_stop(lvgl_tick_timer);
+        ESP_LOGI(TAG, "LVGL tick timer stopped");
+    }
 }
 
 void lvgl_port_resume(void)
 {
+    if (lvgl_tick_timer) {
+        esp_timer_start_periodic(lvgl_tick_timer, LVGL_PORT_TICK_PERIOD_MS * 1000);
+    }
     if (lvgl_task_handle) {
         vTaskResume(lvgl_task_handle);
         ESP_LOGI(TAG, "LVGL task resumed");

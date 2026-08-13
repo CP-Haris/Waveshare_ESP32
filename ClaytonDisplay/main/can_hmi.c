@@ -1,6 +1,6 @@
 /**
  * Clayton Power LPS - CAN HMI Dashboard + Settings
- * ESP32-S3-Touch-LCD-5 (1024x600)
+ * ESP32-S3-Touch-LCD — 1024x600 or 800x480, selected in ui_screen.h
  *
  * Modern graphical dashboard with touch settings menu.
  * Communicates via CAN bus using CAN_Extra (0x19EF) protocol for GET/SET.
@@ -10,11 +10,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/semphr.h"
 #define CONFIG_TWAI_SUPPRESS_DEPRECATE_WARN 1
 #include "driver/twai.h"
 #include "esp_timer.h"
@@ -26,6 +24,9 @@
 #include "can_hmi.h"
 #include "waveshare_rgb_lcd_port.h"
 #include "ble_gateway.h"
+#include "ui_palette.h"
+#include "ui_screen.h"
+#include "dashboard_ui.h"
 
 static const char *TAG = "can_hmi";
 
@@ -66,21 +67,15 @@ static bool should_log_boot_can_frame(uint32_t can_id)
 
 static void log_boot_diag_frame(const char *dir, uint32_t can_id, const uint8_t *data, uint8_t len)
 {
-    uint8_t b0 = (data && len > 0) ? data[0] : 0;
-    uint8_t b1 = (data && len > 1) ? data[1] : 0;
-    uint8_t b2 = (data && len > 2) ? data[2] : 0;
-    uint8_t b3 = (data && len > 3) ? data[3] : 0;
-    uint8_t b4 = (data && len > 4) ? data[4] : 0;
-    uint8_t b5 = (data && len > 5) ? data[5] : 0;
-    uint8_t b6 = (data && len > 6) ? data[6] : 0;
-    uint8_t b7 = (data && len > 7) ? data[7] : 0;
+    uint8_t b[8] = {0};
+    if (data && len > 0) memcpy(b, data, len > 8 ? 8 : len);
 
     ESP_LOGI(TAG,
              "[BLE-CAN][%s] id=0x%08lX len=%u data=%02X %02X %02X %02X %02X %02X %02X %02X",
              dir,
              (unsigned long)can_id,
              (unsigned)len,
-             b0, b1, b2, b3, b4, b5, b6, b7);
+             b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +192,6 @@ static bool    can_target_valid = false;
 // CAN_Extra command IDs (sent via 0x19EF)
 #define CAN_CMD_GET_VAL   0x40
 #define CAN_CMD_SET_VAL   0x41
-#define CAN_CMD_GET_DEF   0x42
 #define CAN_CMD_GET_MIN   0x43
 #define CAN_CMD_GET_MAX   0x44
 
@@ -212,28 +206,112 @@ static bool    can_target_valid = false;
 // ---------------------------------------------------------------------------
 //  Buzzer stubs (no buzzer on ESP32-S3-Touch-LCD-5)
 // ---------------------------------------------------------------------------
-static void buzzer_beep(uint32_t ms)  { (void)ms; }
 static void buzzer_click(void)        { }
 static void buzzer_alarm(void)        { }
 
 // ---------------------------------------------------------------------------
+//  TWAI bus lifecycle
+//
+//  On ESP32-S3 the TWAI clock source is APB (TWAI_CLK_SRC_DEFAULT =
+//  SOC_MOD_CLK_APB), so the driver creates an ESP_PM_APB_FREQ_MAX lock and
+//  takes it in twai_driver_install() — IDF's own comment reads "Acquire
+//  pm_lock during the whole driver lifetime" (driver/twai/twai.c). While that
+//  lock is held, esp_pm can never select PM_MODE_LIGHT_SLEEP, so the CPU keeps
+//  running at 80 MHz even with light_sleep_enable = true.
+//
+//  twai_stop() does NOT release the lock — only twai_driver_uninstall() does.
+//  Standby therefore tears the driver down completely and brings it back for
+//  each listening window.
+// ---------------------------------------------------------------------------
+static bool twai_installed = false;
+
+esp_err_t can_hmi_bus_start(void)
+{
+    if (twai_installed) return ESP_OK;
+
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+        CONFIG_EXAMPLE_TX_GPIO_NUM, CONFIG_EXAMPLE_RX_GPIO_NUM, TWAI_MODE_NORMAL);
+    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED |
+                              TWAI_ALERT_ERR_PASS | TWAI_ALERT_ABOVE_ERR_WARN;
+    g_config.tx_queue_len = 64;
+    g_config.rx_queue_len = 32;
+
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_125KBITS();
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+    esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "[CAN] driver install failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = twai_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "[CAN] start failed: %s", esp_err_to_name(err));
+        twai_driver_uninstall();
+        return err;
+    }
+    twai_installed = true;
+    return ESP_OK;
+}
+
+// Full teardown — this is what actually releases the APB_FREQ_MAX lock.
+static void can_bus_stop(void)
+{
+    if (!twai_installed) return;
+    twai_installed = false;
+    twai_stop();
+    twai_driver_uninstall();
+}
+
+// CANRX (IO16) as a light-sleep wake source. A dominant bit pulls the line low,
+// which wakes the CPU so it can open a listening window. This only wakes the
+// CPU — whether the DISPLAY turns on is decided by lps_wants_wake().
+static void can_wake_source_enable(bool enable)
+{
+    const gpio_num_t rx = (gpio_num_t)CONFIG_EXAMPLE_RX_GPIO_NUM;
+
+#if !PWR_CAN_GPIO_WAKE
+    (void)rx;
+    (void)enable;
+    return;
+#else
+    if (enable) {
+        gpio_config_t cfg = {
+            .pin_bit_mask = (1ULL << CONFIG_EXAMPLE_RX_GPIO_NUM),
+            .mode         = GPIO_MODE_INPUT,
+            .pull_up_en   = GPIO_PULLUP_ENABLE,   // idle bus is recessive = high
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type    = GPIO_INTR_DISABLE,
+        };
+        gpio_config(&cfg);
+        // Keep the pin live while asleep; CONFIG_PM_SLP_DISABLE_GPIO would
+        // otherwise isolate it and the wake would never fire.
+        gpio_sleep_sel_dis(rx);
+        gpio_wakeup_enable(rx, GPIO_INTR_LOW_LEVEL);
+        esp_sleep_enable_gpio_wakeup();
+    } else {
+        gpio_wakeup_disable(rx);
+        gpio_sleep_sel_en(rx);
+    }
+#endif /* PWR_CAN_GPIO_WAKE */
+}
+
+// ---------------------------------------------------------------------------
 //  CAN Send / Receive for Settings (CAN_Extra via 0x19EF)
 // ---------------------------------------------------------------------------
-static void can_send_raw(uint32_t can_id, uint8_t *data, uint8_t len)
+static void can_send_raw(uint32_t can_id, const uint8_t *data, uint8_t len)
 {
+    if (!twai_installed) {
+        // Bus is torn down for standby; the caller will retry once the HMI
+        // task has brought it back up (BLE connect / wake).
+        ESP_LOGD(TAG, "[CAN] TX dropped, bus asleep (id=0x%08lX)",
+                 (unsigned long)can_id);
+        return;
+    }
+
     twai_message_t msg = {0};
     msg.identifier = can_id;
     msg.extd = 1;              // J1939 uses 29-bit extended IDs
-    msg.data_length_code = len;
-    memcpy(msg.data, data, len);
-    twai_transmit(&msg, pdMS_TO_TICKS(10));
-}
-
-static void can_send_raw_ext(uint32_t can_id, const uint8_t *data, uint8_t len)
-{
-    twai_message_t msg = {0};
-    msg.identifier = can_id;
-    msg.extd = 1;
     msg.data_length_code = len > 8 ? 8 : len;
     if (data && msg.data_length_code > 0) {
         memcpy(msg.data, data, msg.data_length_code);
@@ -242,7 +320,7 @@ static void can_send_raw_ext(uint32_t can_id, const uint8_t *data, uint8_t len)
     esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(10));
     boot_tx_diag_update(can_id, msg.data, msg.data_length_code, err);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "[BLE-CAN] TX failed id=0x%08lX dlc=%u err=%s",
+        ESP_LOGW(TAG, "[CAN] TX failed id=0x%08lX dlc=%u err=%s",
                  (unsigned long)can_id,
                  (unsigned)msg.data_length_code,
                  esp_err_to_name(err));
@@ -408,16 +486,18 @@ static setting_t settings_general[] = {
     {"Config Select",        7, 0, PREFIX_ENUM,       0, "",   65536,  0, 0, 65536,  false,true,true, enum_config,2},
 };
 
+#define SETTINGS_COUNT(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
+
 static menu_category_t menu_categories_lps[] = {
-    {"AC Output",       LV_SYMBOL_POWER,    settings_ac_out,    3, INFO_AC_OUT},
-    {"AC Input",        LV_SYMBOL_CHARGE,   settings_ac_in,     1, INFO_AC_IN},
-    {"DC Output",       LV_SYMBOL_DOWNLOAD, settings_dc_out,    3, INFO_DC_OUT},
-    {"DC Input",        LV_SYMBOL_UPLOAD,   settings_dc_in,     4, INFO_DC_IN},
-    {"Starter Battery", LV_SYMBOL_BATTERY_3,settings_starter,   6, INFO_STARTER},
-    {"Solar",           LV_SYMBOL_IMAGE,    settings_solar,     1, INFO_SOLAR},
-    {"General",         LV_SYMBOL_SETTINGS, settings_general,   2, INFO_NONE},
-    {"Status",          LV_SYMBOL_EYE_OPEN, NULL,               0, INFO_LPS_STATUS},
-    {"Temperature",     LV_SYMBOL_WARNING,  NULL,               0, INFO_LPS_TEMP},
+    {"AC Output",       LV_SYMBOL_POWER,    settings_ac_out,  SETTINGS_COUNT(settings_ac_out),  INFO_AC_OUT},
+    {"AC Input",        LV_SYMBOL_CHARGE,   settings_ac_in,   SETTINGS_COUNT(settings_ac_in),   INFO_AC_IN},
+    {"DC Output",       LV_SYMBOL_DOWNLOAD, settings_dc_out,  SETTINGS_COUNT(settings_dc_out),  INFO_DC_OUT},
+    {"DC Input",        LV_SYMBOL_UPLOAD,   settings_dc_in,   SETTINGS_COUNT(settings_dc_in),   INFO_DC_IN},
+    {"Starter Battery", LV_SYMBOL_BATTERY_3,settings_starter, SETTINGS_COUNT(settings_starter), INFO_STARTER},
+    {"Solar",           LV_SYMBOL_IMAGE,    settings_solar,   SETTINGS_COUNT(settings_solar),   INFO_SOLAR},
+    {"General",         LV_SYMBOL_SETTINGS, settings_general, SETTINGS_COUNT(settings_general), INFO_NONE},
+    {"Status",          LV_SYMBOL_EYE_OPEN, NULL,             0, INFO_LPS_STATUS},
+    {"Temperature",     LV_SYMBOL_WARNING,  NULL,             0, INFO_LPS_TEMP},
 };
 #define NUM_CATEGORIES_LPS (sizeof(menu_categories_lps) / sizeof(menu_categories_lps[0]))
 
@@ -428,9 +508,9 @@ static setting_t settings_bms_battery[] = {
 };
 
 static menu_category_t menu_categories_bms[] = {
-    {"Battery",         LV_SYMBOL_BATTERY_FULL, settings_bms_battery,  2, INFO_NONE},
-    {"Status",          LV_SYMBOL_EYE_OPEN,     NULL,                  0, INFO_BMS_STATUS},
-    {"Temperature",     LV_SYMBOL_WARNING,      NULL,                  0, INFO_BMS_TEMP},
+    {"Battery",         LV_SYMBOL_BATTERY_FULL, settings_bms_battery, SETTINGS_COUNT(settings_bms_battery), INFO_NONE},
+    {"Status",          LV_SYMBOL_EYE_OPEN,     NULL,                 0, INFO_BMS_STATUS},
+    {"Temperature",     LV_SYMBOL_WARNING,      NULL,                 0, INFO_BMS_TEMP},
 };
 #define NUM_CATEGORIES_BMS (sizeof(menu_categories_bms) / sizeof(menu_categories_bms[0]))
 
@@ -1023,6 +1103,34 @@ static void decode_identification(int unit_idx, uint8_t pgn_byte, uint8_t *data,
 // ---------------------------------------------------------------------------
 //  CAN Message Decoders
 // ---------------------------------------------------------------------------
+
+// PGN 0x05: failure-code buffer. Updates the unit's code list and, when the
+// unit is the selected one, syncs the global error_flags (clearing popups for
+// codes that disappeared, activating flags for new codes).
+static void decode_failure_codes(lps_data_t *d, const uint8_t *data)
+{
+    uint8_t old_codes[8];
+    memcpy(old_codes, d->failure_codes, 8);
+    d->failure_code_count = 0;
+    for (int i = 0; i < 8; i++) {
+        d->failure_codes[i] = data[i];
+        if (data[i] != 0) d->failure_code_count++;
+    }
+
+    if (d != lps_ptr_) return;
+
+    for (int i = 0; i < 8; i++) {
+        uint8_t oc = old_codes[i];
+        if (oc == 0) continue;
+        bool still_in_buf = false;
+        for (int j = 0; j < 8; j++)
+            if (d->failure_codes[j] == oc) { still_in_buf = true; break; }
+        if (!still_in_buf) { error_flags[oc].active = 0; error_flags[oc].minimized = 0; }
+    }
+    for (int i = 0; i < 8; i++)
+        if (d->failure_codes[i] != 0) error_flags[d->failure_codes[i]].active = 1;
+}
+
 static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint8_t len)
 {
     uint16_t upper = (can_id >> 16) & 0xFFFF;
@@ -1057,30 +1165,9 @@ static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint
             d->dc_output_state = (int8_t)data[6];
             d->dc_output_failure = data[7];
             break;
-        case 0x05: {
-            uint8_t old_codes[8];
-            memcpy(old_codes, d->failure_codes, 8);
-            d->failure_code_count = 0;
-            for (int i = 0; i < 8; i++) {
-                d->failure_codes[i] = data[i];
-                if (data[i] != 0) d->failure_code_count++;
-            }
-            if (d == lps_ptr_) {
-                for (int i = 0; i < 8; i++) {
-                    uint8_t oc = old_codes[i];
-                    if (oc == 0) continue;
-                    bool still_in_buf = false;
-                    for (int j = 0; j < 8; j++)
-                        if (d->failure_codes[j] == oc) { still_in_buf = true; break; }
-                    if (!still_in_buf) { error_flags[oc].active = 0; error_flags[oc].minimized = 0; }
-                }
-                for (int i = 0; i < 8; i++) {
-                    uint8_t nc = d->failure_codes[i];
-                    if (nc != 0) error_flags[nc].active = 1;
-                }
-            }
+        case 0x05:
+            decode_failure_codes(d, data);
             break;
-        }
         case 0x06:
             d->temp_internal[0] = BYTES_TO_SINT16(data[0], data[1]) / 256.0f;
             d->temp_internal[1] = BYTES_TO_SINT16(data[2], data[3]) / 256.0f;
@@ -1140,28 +1227,9 @@ static void decode_broadcast_bms(lps_data_t *d, uint32_t can_id, uint8_t *data, 
         case 0x03:
             d->dc_output_voltage_v = BYTES_TO_UINT16(data[0], data[1]) / 1000.0f;
             break;
-        case 0x05: {
-            uint8_t old_codes[8];
-            memcpy(old_codes, d->failure_codes, 8);
-            d->failure_code_count = 0;
-            for (int i = 0; i < 8; i++) {
-                d->failure_codes[i] = data[i];
-                if (data[i] != 0) d->failure_code_count++;
-            }
-            if (d == lps_ptr_) {
-                for (int i = 0; i < 8; i++) {
-                    uint8_t oc = old_codes[i];
-                    if (oc == 0) continue;
-                    bool still = false;
-                    for (int j = 0; j < 8; j++)
-                        if (d->failure_codes[j] == oc) { still = true; break; }
-                    if (!still) { error_flags[oc].active = 0; error_flags[oc].minimized = 0; }
-                }
-                for (int i = 0; i < 8; i++)
-                    if (d->failure_codes[i] != 0) error_flags[d->failure_codes[i]].active = 1;
-            }
+        case 0x05:
+            decode_failure_codes(d, data);
             break;
-        }
         case 0x06:
             d->temp_internal[0] = BYTES_TO_SINT16(data[0], data[1]) / 256.0f;
             d->temp_internal[1] = BYTES_TO_SINT16(data[2], data[3]) / 256.0f;
@@ -1267,26 +1335,16 @@ static void decode_can_message(uint32_t can_id, uint8_t *data, uint8_t len)
 }
 
 // ---------------------------------------------------------------------------
-//  Color Theme
+//  Color Theme (shared palette — single source of truth in ui_palette.h)
 // ---------------------------------------------------------------------------
-#define COL_BG_DARK    lv_color_hex(0x0d1117)
-#define COL_BG_PANEL   lv_color_hex(0x161b22)
-#define COL_BG_CARD    lv_color_hex(0x21262d)
-#define COL_ACCENT     lv_color_hex(0x00b4d8)
-#define COL_GREEN      lv_color_hex(0x3fb950)
-#define COL_ORANGE     lv_color_hex(0xd29922)
-#define COL_RED        lv_color_hex(0xf85149)
-#define COL_TEXT       lv_color_hex(0xe6edf3)
-#define COL_TEXT_DIM   lv_color_hex(0x8b949e)
-#define COL_SOC_ARC    lv_color_hex(0x00d4ff)
-#define COL_SOC_BG     lv_color_hex(0x1a2332)
-#define COL_SOLAR      lv_color_hex(0xf0c000)
+/* Palette macros (COL_BG_DARK, COL_ACCENT, ...) come from ui_palette.h so the
+ * firmware and the PC simulator can never use divergent colors. */
 
 // ---------------------------------------------------------------------------
-//  Screen dimensions (1024x600)
+//  Screen dimensions — SCREEN_W / SCREEN_H / UI_COMPACT come from ui_screen.h,
+//  which is also what drives the LCD driver (lvgl_port.h). Never hard-code a
+//  resolution below; derive from these instead.
 // ---------------------------------------------------------------------------
-#define SCREEN_W  1024
-#define SCREEN_H  600
 
 // ---------------------------------------------------------------------------
 //  Page management
@@ -1300,29 +1358,8 @@ static lv_obj_t *page_detail;
 static lv_obj_t *page_errors;
 static device_type_t grid_built_for = DEV_UNKNOWN;
 
-// Dashboard elements
-static lv_obj_t *arc_soc;
-static lv_obj_t *lbl_soc_pct;
-static lv_obj_t *lbl_time_left;
-static lv_obj_t *lbl_batt_info;
-static lv_obj_t *btn_settings;
-static lv_obj_t *ble_status_icon;
-static lv_obj_t *btn_inv_toggle;
-static lv_obj_t *lbl_inv_toggle;
-static lv_obj_t *btn_dcout_toggle;
-static lv_obj_t *lbl_dcout_toggle;
-static lv_obj_t *lbl_icon_ac;
-static lv_obj_t *lbl_icon_dc;
-static lv_obj_t *lbl_icon_solar;
-static lv_obj_t *btn_error_badge;
-static lv_obj_t *lbl_error_badge;
-
-// Device selector
-static lv_obj_t *dev_sel_container;
-static lv_obj_t *btn_dev_prev;
-static lv_obj_t *btn_dev_next;
-static lv_obj_t *lbl_dev_name;
-static lv_obj_t *lbl_dev_status;
+// Dashboard widgets are owned by the shared dashboard_ui module (dashboard_ui.c)
+// so the layout is identical between firmware and the PC simulator.
 
 // Error page
 static lv_obj_t *error_content;
@@ -1388,30 +1425,6 @@ static const char *get_func_state_str(int8_t state)
     }
 }
 
-static lv_color_t get_failure_color(uint8_t level)
-{
-    switch (level) {
-    case 0: return COL_GREEN; case 1: case 2: return COL_ORANGE;
-    case 3: case 4: return COL_RED;
-    default: return COL_TEXT_DIM;
-    }
-}
-
-static lv_color_t get_soc_color(float soc)
-{
-    if (soc > 50.0f) return COL_GREEN;
-    if (soc > 20.0f) return COL_ORANGE;
-    return COL_RED;
-}
-
-static void set_label_text_if_changed(lv_obj_t *label, const char *text)
-{
-    const char *current = lv_label_get_text(label);
-    if (!current || strcmp(current, text) != 0) {
-        lv_label_set_text(label, text);
-    }
-}
-
 static void format_setting_value(char *buf, size_t buflen, setting_t *s, int32_t val)
 {
     float fval = Q16_TO_FLOAT(val);
@@ -1463,11 +1476,8 @@ static const char *get_bms_operating_state_str(uint8_t state)
     }
 }
 
-// Info row labels per info_type
-static const char *info_labels_ac_out[]     = {"Status", "Power", "Voltage", "Current"};
-static const char *info_labels_ac_in[]      = {"Status", "Power", "Voltage", "Current"};
-static const char *info_labels_dc_out[]     = {"Status", "Power", "Voltage", "Current"};
-static const char *info_labels_dc_in[]      = {"Status", "Power", "Voltage", "Current"};
+// Info row labels per info_type (AC/DC in/out share the same four rows)
+static const char *info_labels_power4[]     = {"Status", "Power", "Voltage", "Current"};
 static const char *info_labels_solar[]      = {"Status", "Current"};
 static const char *info_labels_lps_status[] = {"State", "SOC", "Time Left", "Power",
                                                "Voltage", "Current",
@@ -1494,10 +1504,10 @@ static int get_info_count(int info_type)
 static const char **get_info_labels(int info_type)
 {
     switch (info_type) {
-    case INFO_AC_OUT:     return info_labels_ac_out;
-    case INFO_AC_IN:      return info_labels_ac_in;
-    case INFO_DC_OUT:     return info_labels_dc_out;
-    case INFO_DC_IN:      return info_labels_dc_in;
+    case INFO_AC_OUT:
+    case INFO_AC_IN:
+    case INFO_DC_OUT:
+    case INFO_DC_IN:      return info_labels_power4;
     case INFO_SOLAR:      return info_labels_solar;
     case INFO_LPS_STATUS: return info_labels_lps_status;
     case INFO_LPS_TEMP:   return info_labels_lps_temp;
@@ -1606,44 +1616,6 @@ static void format_info_value(char *buf, size_t sz, int cat_idx, int row)
         } break;
     }
     snprintf(buf, sz, "--");
-}
-
-// Create a styled panel/card
-static lv_obj_t *create_card(lv_obj_t *parent, lv_coord_t w, lv_coord_t h)
-{
-    lv_obj_t *card = lv_obj_create(parent);
-    lv_obj_set_size(card, w, h);
-    lv_obj_set_style_bg_color(card, COL_BG_CARD, 0);
-    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(card, 1, 0);
-    lv_obj_set_style_border_color(card, lv_color_hex(0x30363d), 0);
-    lv_obj_set_style_radius(card, 8, 0);
-    lv_obj_set_style_pad_all(card, 6, 0);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    return card;
-}
-
-static lv_obj_t *create_section_label(lv_obj_t *parent, const char *text,
-                                       lv_align_t align, lv_coord_t x, lv_coord_t y)
-{
-    lv_obj_t *lbl = lv_label_create(parent);
-    lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_color(lbl, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl, align, x, y);
-    return lbl;
-}
-
-static lv_obj_t *create_value_label(lv_obj_t *parent, const char *text,
-                                     const lv_font_t *font,
-                                     lv_align_t align, lv_coord_t x, lv_coord_t y)
-{
-    lv_obj_t *lbl = lv_label_create(parent);
-    lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_color(lbl, COL_TEXT, 0);
-    lv_obj_set_style_text_font(lbl, font, 0);
-    lv_obj_align(lbl, align, x, y);
-    return lbl;
 }
 
 // ---------------------------------------------------------------------------
@@ -1845,13 +1817,46 @@ static void create_page_fullscreen(lv_obj_t **page, lv_obj_t *parent)
     lv_obj_clear_flag(*page, LV_OBJ_FLAG_CLICKABLE);
 }
 
-// Grid layout constants for 1024×600
+// Shared page header: colored title (top-left) + Back button (top-right).
+// Returns the title label (child 0 of the page) so callers can retitle it.
+static lv_obj_t *create_page_header(lv_obj_t *page, const char *title,
+                                    lv_color_t title_color, lv_event_cb_t back_cb)
+{
+    lv_obj_t *lbl = lv_label_create(page);
+    lv_label_set_text(lbl, title);
+    lv_obj_set_style_text_color(lbl, title_color, 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
+    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 16, 12);
+
+    lv_obj_t *btn = lv_btn_create(page);
+    lv_obj_set_size(btn, 100, 40);
+    lv_obj_align(btn, LV_ALIGN_TOP_RIGHT, -12, 8);
+    lv_obj_set_style_bg_color(btn, COL_BG_CARD, 0);
+    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_t *lb = lv_label_create(btn);
+    lv_label_set_text(lb, LV_SYMBOL_LEFT " Back");
+    lv_obj_set_style_text_font(lb, &lv_font_montserrat_14, 0);
+    lv_obj_center(lb);
+    lv_obj_add_event_cb(btn, back_cb, LV_EVENT_CLICKED, NULL);
+    return lbl;
+}
+
+// Grid layout constants. 4 columns on 1024×600, 3 wider columns on 800×480 —
+// both fit the 9 LPS categories in 3 rows without scrolling.
+#if UI_COMPACT
+#define TILE_W    232
+#define TILE_H    124
+#define TILE_GAP  14
+#define GRID_COLS 3
+#define GRID_Y0   48
+#else
 #define TILE_W    200
 #define TILE_H    140
 #define TILE_GAP  20
 #define GRID_COLS 4
-#define GRID_X0   ((SCREEN_W - GRID_COLS*TILE_W - (GRID_COLS-1)*TILE_GAP) / 2)
 #define GRID_Y0   56
+#endif
+#define GRID_X0   ((SCREEN_W - GRID_COLS*TILE_W - (GRID_COLS-1)*TILE_GAP) / 2)
 
 static void build_grid_tiles(void)
 {
@@ -1891,23 +1896,7 @@ static void build_grid_tiles(void)
 static void create_settings_grid(lv_obj_t *parent)
 {
     create_page_fullscreen(&page_grid, parent);
-
-    lv_obj_t *lbl = lv_label_create(page_grid);
-    lv_label_set_text(lbl, LV_SYMBOL_SETTINGS "  SETTINGS");
-    lv_obj_set_style_text_color(lbl, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
-    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 16, 12);
-
-    lv_obj_t *btn = lv_btn_create(page_grid);
-    lv_obj_set_size(btn, 100, 40);
-    lv_obj_align(btn, LV_ALIGN_TOP_RIGHT, -12, 8);
-    lv_obj_set_style_bg_color(btn, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn, 8, 0);
-    lv_obj_t *lb = lv_label_create(btn);
-    lv_label_set_text(lb, LV_SYMBOL_LEFT " Back");
-    lv_obj_set_style_text_font(lb, &lv_font_montserrat_14, 0);
-    lv_obj_center(lb);
-    lv_obj_add_event_cb(btn, btn_grid_back_cb, LV_EVENT_CLICKED, NULL);
+    create_page_header(page_grid, LV_SYMBOL_SETTINGS "  SETTINGS", COL_ACCENT, btn_grid_back_cb);
 
     build_grid_tiles();
     grid_built_for = (selected_unit >= 0) ? unit_table[selected_unit].device_type : DEV_UNKNOWN;
@@ -1930,7 +1919,9 @@ static void rebuild_settings_grid(void)
 // ---------------------------------------------------------------------------
 //  Category detail page
 // ---------------------------------------------------------------------------
-#define DETAIL_ROW_W 960
+// Row width = content width (SCREEN_W - 20, minus 2×4 padding) less room for
+// the scrollbar: 960 on 1024×600, 736 on 800×480.
+#define DETAIL_ROW_W (SCREEN_W - 64)
 
 static void setting_item_cb(lv_event_t *e)
 {
@@ -2063,23 +2054,7 @@ static void update_settings_detail(void)
 static void create_settings_detail(lv_obj_t *parent)
 {
     create_page_fullscreen(&page_detail, parent);
-
-    lv_obj_t *lbl = lv_label_create(page_detail);
-    lv_label_set_text(lbl, "");
-    lv_obj_set_style_text_color(lbl, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
-    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 16, 12);
-
-    lv_obj_t *btn = lv_btn_create(page_detail);
-    lv_obj_set_size(btn, 100, 40);
-    lv_obj_align(btn, LV_ALIGN_TOP_RIGHT, -12, 8);
-    lv_obj_set_style_bg_color(btn, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn, 8, 0);
-    lv_obj_t *lb = lv_label_create(btn);
-    lv_label_set_text(lb, LV_SYMBOL_LEFT " Back");
-    lv_obj_set_style_text_font(lb, &lv_font_montserrat_14, 0);
-    lv_obj_center(lb);
-    lv_obj_add_event_cb(btn, btn_detail_back_cb, LV_EVENT_CLICKED, NULL);
+    create_page_header(page_detail, "", COL_ACCENT, btn_detail_back_cb);
 
     detail_content = lv_obj_create(page_detail);
     lv_obj_set_size(detail_content, SCREEN_W - 20, SCREEN_H - 60);
@@ -2124,28 +2099,12 @@ static const char *get_error_level_str(uint8_t level)
 static void error_row_click_cb(lv_event_t *e);
 static void show_error_popup(uint8_t code);
 
-#define ERROR_ROW_W 960
+#define ERROR_ROW_W (SCREEN_W - 64)
 
 static void create_error_page(lv_obj_t *parent)
 {
     create_page_fullscreen(&page_errors, parent);
-
-    lv_obj_t *lbl = lv_label_create(page_errors);
-    lv_label_set_text(lbl, LV_SYMBOL_WARNING "  ERRORS");
-    lv_obj_set_style_text_color(lbl, COL_RED, 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
-    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 16, 12);
-
-    lv_obj_t *btn = lv_btn_create(page_errors);
-    lv_obj_set_size(btn, 100, 40);
-    lv_obj_align(btn, LV_ALIGN_TOP_RIGHT, -12, 8);
-    lv_obj_set_style_bg_color(btn, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn, 8, 0);
-    lv_obj_t *lb = lv_label_create(btn);
-    lv_label_set_text(lb, LV_SYMBOL_LEFT " Back");
-    lv_obj_set_style_text_font(lb, &lv_font_montserrat_14, 0);
-    lv_obj_center(lb);
-    lv_obj_add_event_cb(btn, btn_error_back_cb, LV_EVENT_CLICKED, NULL);
+    create_page_header(page_errors, LV_SYMBOL_WARNING "  ERRORS", COL_RED, btn_error_back_cb);
 
     error_content = lv_obj_create(page_errors);
     lv_obj_set_size(error_content, SCREEN_W - 20, SCREEN_H - 60);
@@ -2428,21 +2387,7 @@ static void create_ble_pin_popup(lv_obj_t *parent, uint32_t ble_pin)
     lv_obj_add_event_cb(btn_close, ble_pin_close_cb, LV_EVENT_CLICKED, NULL);
 }
 
-static bool check_for_error_popup(void)
-{
-    for (int i = 0; i < 8; i++) {
-        uint8_t code = lps.failure_codes[i];
-        if (code == 0) continue;
-        if (!error_flags[code].active) continue;
-        if (error_flags[code].minimized) continue;
-        const error_def_t *def = lookup_error(code);
-        uint8_t pl = def ? def->pop_level : POP_AUTO;
-        if (pl == POP_HIDE) continue;
-        return true;
-    }
-    return false;
-}
-
+// First active, non-minimized error code that wants a popup (0 = none).
 static uint8_t get_popup_error_code(void)
 {
     for (int i = 0; i < 8; i++) {
@@ -2531,18 +2476,20 @@ static void btn_dev_next_cb(lv_event_t *e)
     reset_all_settings_received();
 }
 
-static void update_device_selector(void)
+// Fill the model's device-selector fields (name string, online state). The
+// dashboard_ui module decides visibility/colors from these.
+static char s_dev_name_buf[80];
+static void fill_dev_selector(dashboard_model_t *m)
 {
     if (!unit_is_online_idx(selected_unit)) {
         select_unit(unit_first_online());
     }
 
     int count = unit_online_count();
-    if (count <= 1) {
-        lv_obj_add_flag(dev_sel_container, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    lv_obj_clear_flag(dev_sel_container, LV_OBJ_FLAG_HIDDEN);
+    m->dev_sel_visible = (count > 1);
+    m->dev_online = (selected_unit >= 0 &&
+                     unit_table[selected_unit].status == UNIT_ONLINE);
+    if (count <= 1) { m->dev_name = NULL; return; }
 
     int unit_num = 0, pos = 0;
     for (int i = 0; i < UNIT_TABLE_SIZE; i++) {
@@ -2552,404 +2499,91 @@ static void update_device_selector(void)
         }
     }
 
-    char buf[80];
     if (selected_unit >= 0) {
         unit_entry_t *u = &unit_table[selected_unit];
         if (u->id_complete && u->part_number[0]) {
             if (u->serial_str[0]) {
                 const char *short_serial = strchr(u->serial_str, '-');
                 short_serial = short_serial ? short_serial + 1 : u->serial_str;
-                snprintf(buf, sizeof(buf), "%d/%d %s (%s)", unit_num, count, u->part_number, short_serial);
+                snprintf(s_dev_name_buf, sizeof(s_dev_name_buf), "%d/%d %s (%s)", unit_num, count, u->part_number, short_serial);
             } else {
-                snprintf(buf, sizeof(buf), "%d/%d %s", unit_num, count, u->part_number);
+                snprintf(s_dev_name_buf, sizeof(s_dev_name_buf), "%d/%d %s", unit_num, count, u->part_number);
             }
         } else {
-            snprintf(buf, sizeof(buf), "%d/%d (0x%02X)", unit_num, count, u->can_addr);
+            snprintf(s_dev_name_buf, sizeof(s_dev_name_buf), "%d/%d (0x%02X)", unit_num, count, u->can_addr);
         }
     } else
-        snprintf(buf, sizeof(buf), "No Unit");
-    set_label_text_if_changed(lbl_dev_name, buf);
-
-    if (selected_unit >= 0 && unit_table[selected_unit].status == UNIT_ONLINE)
-        lv_obj_set_style_bg_color(lbl_dev_status, COL_GREEN, 0);
-    else
-        lv_obj_set_style_bg_color(lbl_dev_status, COL_TEXT_DIM, 0);
+        snprintf(s_dev_name_buf, sizeof(s_dev_name_buf), "No Unit");
+    m->dev_name = s_dev_name_buf;
 }
 
 // ---------------------------------------------------------------------------
-//  Dashboard UI Construction (1024×600 landscape)
+//  Dashboard UI Construction (landscape) — via shared dashboard_ui
 // ---------------------------------------------------------------------------
+// Thin callback trampolines: the shared module calls these void(void) hooks,
+// which forward to the existing CAN/navigation event handlers.
+static void dui_on_inverter(void) { btn_inv_toggle_cb(NULL); }
+static void dui_on_dcout(void)    { btn_dcout_toggle_cb(NULL); }
+static void dui_on_settings(void) { btn_settings_cb(NULL); }
+static void dui_on_error(void)    { btn_error_badge_cb(NULL); }
+static void dui_on_prev(void)     { btn_dev_prev_cb(NULL); }
+static void dui_on_next(void)     { btn_dev_next_cb(NULL); }
+
 static void create_dashboard(lv_obj_t *parent)
 {
-    page_dashboard = lv_obj_create(parent);
-    lv_obj_set_size(page_dashboard, SCREEN_W, SCREEN_H);
-    lv_obj_set_style_bg_color(page_dashboard, COL_BG_DARK, 0);
-    lv_obj_set_style_bg_opa(page_dashboard, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(page_dashboard, 0, 0);
-    lv_obj_set_style_pad_all(page_dashboard, 0, 0);
-    lv_obj_set_style_radius(page_dashboard, 0, 0);
-    lv_obj_align(page_dashboard, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_clear_flag(page_dashboard, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(page_dashboard, LV_OBJ_FLAG_CLICKABLE);
-
-    // SOC Arc — dominant, centered
-    arc_soc = lv_arc_create(page_dashboard);
-    lv_obj_set_size(arc_soc, 380, 380);
-    lv_arc_set_rotation(arc_soc, 135);
-    lv_arc_set_bg_angles(arc_soc, 0, 270);
-    lv_arc_set_range(arc_soc, 0, 100);
-    lv_arc_set_value(arc_soc, 0);
-    lv_obj_align(arc_soc, LV_ALIGN_TOP_MID, 0, 62);
-    lv_obj_remove_style(arc_soc, NULL, LV_PART_KNOB);
-    lv_obj_clear_flag(arc_soc, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_color(arc_soc, COL_SOC_BG, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc_soc, 26, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(arc_soc, COL_SOC_ARC, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc_soc, 26, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_rounded(arc_soc, true, LV_PART_INDICATOR);
-
-    // SOC percentage — large, inside arc
-    lbl_soc_pct = lv_label_create(page_dashboard);
-    lv_label_set_text(lbl_soc_pct, "--%");
-    lv_obj_set_style_text_color(lbl_soc_pct, COL_TEXT, 0);
-    lv_obj_set_style_text_font(lbl_soc_pct, &lv_font_montserrat_48, 0);
-    lv_obj_align(lbl_soc_pct, LV_ALIGN_TOP_MID, 0, 202);
-
-    // Time left
-    lbl_time_left = lv_label_create(page_dashboard);
-    lv_label_set_text(lbl_time_left, "-- min");
-    lv_obj_set_style_text_color(lbl_time_left, COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(lbl_time_left, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_time_left, LV_ALIGN_TOP_MID, 0, 262);
-
-    // Battery voltage + current
-    lbl_batt_info = lv_label_create(page_dashboard);
-    lv_label_set_text(lbl_batt_info, "--.- V   --.- A");
-    lv_obj_set_style_text_color(lbl_batt_info, COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(lbl_batt_info, &lv_font_montserrat_20, 0);
-    lv_obj_align(lbl_batt_info, LV_ALIGN_TOP_MID, 0, 452);
-
-    // Toggle buttons
-    btn_inv_toggle = lv_btn_create(page_dashboard);
-    lv_obj_set_size(btn_inv_toggle, 300, 56);
-    lv_obj_align(btn_inv_toggle, LV_ALIGN_BOTTOM_LEFT, 100, -16);
-    lv_obj_set_style_bg_color(btn_inv_toggle, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn_inv_toggle, 16, 0);
-    lv_obj_set_style_border_width(btn_inv_toggle, 1, 0);
-    lv_obj_set_style_border_color(btn_inv_toggle, lv_color_hex(0x3a4654), 0);
-    lv_obj_set_style_shadow_width(btn_inv_toggle, 16, 0);
-    lv_obj_set_style_shadow_color(btn_inv_toggle, lv_color_hex(0x05080c), 0);
-    lbl_inv_toggle = lv_label_create(btn_inv_toggle);
-    lv_label_set_text(lbl_inv_toggle, LV_SYMBOL_POWER " INVERTER");
-    lv_obj_set_style_text_font(lbl_inv_toggle, &lv_font_montserrat_20, 0);
-    lv_obj_center(lbl_inv_toggle);
-    lv_obj_add_event_cb(btn_inv_toggle, btn_inv_toggle_cb, LV_EVENT_CLICKED, NULL);
-
-    btn_dcout_toggle = lv_btn_create(page_dashboard);
-    lv_obj_set_size(btn_dcout_toggle, 300, 56);
-    lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_RIGHT, -100, -16);
-    lv_obj_set_style_bg_color(btn_dcout_toggle, COL_BG_CARD, 0);
-    lv_obj_set_style_radius(btn_dcout_toggle, 16, 0);
-    lv_obj_set_style_border_width(btn_dcout_toggle, 1, 0);
-    lv_obj_set_style_border_color(btn_dcout_toggle, lv_color_hex(0x3a4654), 0);
-    lv_obj_set_style_shadow_width(btn_dcout_toggle, 16, 0);
-    lv_obj_set_style_shadow_color(btn_dcout_toggle, lv_color_hex(0x05080c), 0);
-    lbl_dcout_toggle = lv_label_create(btn_dcout_toggle);
-    lv_label_set_text(lbl_dcout_toggle, LV_SYMBOL_DOWNLOAD " DC OUT");
-    lv_obj_set_style_text_font(lbl_dcout_toggle, &lv_font_montserrat_20, 0);
-    lv_obj_center(lbl_dcout_toggle);
-    lv_obj_add_event_cb(btn_dcout_toggle, btn_dcout_toggle_cb, LV_EVENT_CLICKED, NULL);
-
-    // Bluetooth status (top-left)
-    ble_status_icon = lv_label_create(page_dashboard);
-    lv_label_set_text(ble_status_icon, LV_SYMBOL_BLUETOOTH);
-    lv_obj_set_style_text_color(ble_status_icon, lv_color_hex(0x555555), 0);
-    lv_obj_set_style_text_font(ble_status_icon, &lv_font_montserrat_24, 0);
-    lv_obj_align(ble_status_icon, LV_ALIGN_TOP_LEFT, 86, 22);
-
-    btn_settings = lv_btn_create(page_dashboard);
-    lv_obj_set_size(btn_settings, 48, 48);
-    lv_obj_align(btn_settings, LV_ALIGN_TOP_RIGHT, -14, 12);
-    lv_obj_set_style_bg_color(btn_settings, COL_ACCENT, 0);
-    lv_obj_set_style_radius(btn_settings, 24, 0);
-    lv_obj_set_style_shadow_width(btn_settings, 14, 0);
-    lv_obj_set_style_shadow_color(btn_settings, lv_color_hex(0x003541), 0);
-    lv_obj_t *gear = lv_label_create(btn_settings);
-    lv_label_set_text(gear, LV_SYMBOL_SETTINGS);
-    lv_obj_set_style_text_font(gear, &lv_font_montserrat_24, 0);
-    lv_obj_center(gear);
-    lv_obj_add_event_cb(btn_settings, btn_settings_cb, LV_EVENT_CLICKED, NULL);
-
-    // Device selector
-    dev_sel_container = lv_obj_create(page_dashboard);
-    lv_obj_set_size(dev_sel_container, 340, 44);
-    lv_obj_align(dev_sel_container, LV_ALIGN_TOP_MID, 0, 14);
-    lv_obj_set_style_bg_color(dev_sel_container, COL_BG_CARD, 0);
-    lv_obj_set_style_bg_opa(dev_sel_container, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(dev_sel_container, 22, 0);
-    lv_obj_set_style_border_width(dev_sel_container, 1, 0);
-    lv_obj_set_style_border_color(dev_sel_container, lv_color_hex(0x30363d), 0);
-    lv_obj_set_style_pad_all(dev_sel_container, 0, 0);
-    lv_obj_clear_flag(dev_sel_container, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(dev_sel_container, LV_OBJ_FLAG_HIDDEN);
-
-    btn_dev_prev = lv_btn_create(dev_sel_container);
-    lv_obj_set_size(btn_dev_prev, 40, 36);
-    lv_obj_align(btn_dev_prev, LV_ALIGN_LEFT_MID, 2, 0);
-    lv_obj_set_style_bg_opa(btn_dev_prev, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_shadow_width(btn_dev_prev, 0, 0);
-    lv_obj_t *lbl_prev = lv_label_create(btn_dev_prev);
-    lv_label_set_text(lbl_prev, LV_SYMBOL_LEFT);
-    lv_obj_set_style_text_color(lbl_prev, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(lbl_prev, &lv_font_montserrat_16, 0);
-    lv_obj_center(lbl_prev);
-    lv_obj_add_event_cb(btn_dev_prev, btn_dev_prev_cb, LV_EVENT_CLICKED, NULL);
-
-    lbl_dev_status = lv_obj_create(dev_sel_container);
-    lv_obj_set_size(lbl_dev_status, 10, 10);
-    lv_obj_set_style_radius(lbl_dev_status, 5, 0);
-    lv_obj_set_style_bg_color(lbl_dev_status, COL_GREEN, 0);
-    lv_obj_set_style_bg_opa(lbl_dev_status, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(lbl_dev_status, 0, 0);
-    lv_obj_align(lbl_dev_status, LV_ALIGN_LEFT_MID, 46, 0);
-    lv_obj_clear_flag(lbl_dev_status, LV_OBJ_FLAG_SCROLLABLE);
-
-    lbl_dev_name = lv_label_create(dev_sel_container);
-    lv_label_set_text(lbl_dev_name, "Unit 1/1");
-    lv_obj_set_style_text_color(lbl_dev_name, COL_TEXT, 0);
-    lv_obj_set_style_text_font(lbl_dev_name, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_dev_name, LV_ALIGN_CENTER, 4, 0);
-
-    btn_dev_next = lv_btn_create(dev_sel_container);
-    lv_obj_set_size(btn_dev_next, 40, 36);
-    lv_obj_align(btn_dev_next, LV_ALIGN_RIGHT_MID, -2, 0);
-    lv_obj_set_style_bg_opa(btn_dev_next, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_shadow_width(btn_dev_next, 0, 0);
-    lv_obj_t *lbl_next = lv_label_create(btn_dev_next);
-    lv_label_set_text(lbl_next, LV_SYMBOL_RIGHT);
-    lv_obj_set_style_text_color(lbl_next, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(lbl_next, &lv_font_montserrat_16, 0);
-    lv_obj_center(lbl_next);
-    lv_obj_add_event_cb(btn_dev_next, btn_dev_next_cb, LV_EVENT_CLICKED, NULL);
-
-    // Charging source indicators
-    lbl_icon_ac = lv_label_create(page_dashboard);
-    lv_label_set_text(lbl_icon_ac, LV_SYMBOL_CHARGE " AC");
-    lv_obj_set_style_text_color(lbl_icon_ac, COL_GREEN, 0);
-    lv_obj_set_style_text_font(lbl_icon_ac, &lv_font_montserrat_20, 0);
-    lv_obj_add_flag(lbl_icon_ac, LV_OBJ_FLAG_HIDDEN);
-
-    lbl_icon_dc = lv_label_create(page_dashboard);
-    lv_label_set_text(lbl_icon_dc, LV_SYMBOL_UPLOAD " DC");
-    lv_obj_set_style_text_color(lbl_icon_dc, COL_GREEN, 0);
-    lv_obj_set_style_text_font(lbl_icon_dc, &lv_font_montserrat_20, 0);
-    lv_obj_add_flag(lbl_icon_dc, LV_OBJ_FLAG_HIDDEN);
-
-    lbl_icon_solar = lv_label_create(page_dashboard);
-    lv_label_set_text(lbl_icon_solar, LV_SYMBOL_IMAGE " Solar");
-    lv_obj_set_style_text_color(lbl_icon_solar, COL_SOLAR, 0);
-    lv_obj_set_style_text_font(lbl_icon_solar, &lv_font_montserrat_20, 0);
-    lv_obj_add_flag(lbl_icon_solar, LV_OBJ_FLAG_HIDDEN);
-
-    // Error warning badge (top-left)
-    btn_error_badge = lv_btn_create(page_dashboard);
-    lv_obj_set_size(btn_error_badge, 54, 48);
-    lv_obj_align(btn_error_badge, LV_ALIGN_TOP_LEFT, 14, 12);
-    lv_obj_set_style_bg_color(btn_error_badge, COL_RED, 0);
-    lv_obj_set_style_radius(btn_error_badge, 16, 0);
-    lv_obj_set_style_border_width(btn_error_badge, 0, 0);
-    lv_obj_set_style_shadow_width(btn_error_badge, 14, 0);
-    lv_obj_set_style_shadow_color(btn_error_badge, lv_color_hex(0x330a0a), 0);
-    lbl_error_badge = lv_label_create(btn_error_badge);
-    lv_label_set_text(lbl_error_badge, LV_SYMBOL_WARNING);
-    lv_obj_set_style_text_font(lbl_error_badge, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl_error_badge, lv_color_hex(0xffffff), 0);
-    lv_obj_center(lbl_error_badge);
-    lv_obj_add_event_cb(btn_error_badge, btn_error_badge_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_flag(btn_error_badge, LV_OBJ_FLAG_HIDDEN);
+    static const dashboard_callbacks_t cb = {
+        .on_inverter    = dui_on_inverter,
+        .on_dcout       = dui_on_dcout,
+        .on_settings    = dui_on_settings,
+        .on_error_badge = dui_on_error,
+        .on_dev_prev    = dui_on_prev,
+        .on_dev_next    = dui_on_next,
+    };
+    dashboard_ui_create(parent, &cb);
+    page_dashboard = dashboard_ui_root();
 }
 
 // ---------------------------------------------------------------------------
-//  Dashboard UI Update
+//  Dashboard UI Update — build a model snapshot and hand it to dashboard_ui
 // ---------------------------------------------------------------------------
 static void update_dashboard(void)
 {
-    static bool dashboard_layout_initialized = false;
-    static bool dashboard_layout_bms = false;
-    char buf[64];
-    update_device_selector();
-
     uint32_t now = now_ms();
     if (lps.connected && (now - lps.last_msg_time_ms > 3000))
         lps.connected = false;
 
-    // SOC Arc
-    int soc_val = (int)(lps.soc_percent + 0.5f);
-    if (soc_val < 0) soc_val = 0;
-    if (soc_val > 100) soc_val = 100;
-    lv_arc_set_value(arc_soc, soc_val);
-    lv_color_t soc_col = get_soc_color(lps.soc_percent);
-    lv_obj_set_style_arc_color(arc_soc, soc_col, LV_PART_INDICATOR);
-    snprintf(buf, sizeof(buf), "%d%%", soc_val);
-    set_label_text_if_changed(lbl_soc_pct, buf);
-    lv_obj_set_style_text_color(lbl_soc_pct, soc_col, 0);
+    device_type_t dt = DEV_UNKNOWN;
+    if (selected_unit >= 0) dt = unit_table[selected_unit].device_type;
 
-    // Time left
-    {
-        bool charging = lps.battery_current_a < -0.5f;
-        bool discharging = lps.battery_current_a > 0.5f;
-        int time_min = lps.soc_time_min < 0 ? -lps.soc_time_min : lps.soc_time_min;
-        if (time_min > 0) {
-            int hrs = time_min / 60, mins = time_min % 60;
-            const char *arrow = charging ? LV_SYMBOL_UP : LV_SYMBOL_DOWN;
-            if (hrs > 0) snprintf(buf, sizeof(buf), "%s %dh %dm", arrow, hrs, mins);
-            else         snprintf(buf, sizeof(buf), "%s %d min", arrow, mins);
-            lv_obj_set_style_text_color(lbl_time_left, charging ? COL_GREEN : COL_TEXT_DIM, 0);
-        } else if (charging) {
-            snprintf(buf, sizeof(buf), LV_SYMBOL_UP " Charging");
-            lv_obj_set_style_text_color(lbl_time_left, COL_GREEN, 0);
-        } else if (discharging) {
-            snprintf(buf, sizeof(buf), LV_SYMBOL_DOWN " ---");
-            lv_obj_set_style_text_color(lbl_time_left, COL_TEXT_DIM, 0);
-        } else {
-            snprintf(buf, sizeof(buf), "Standby");
-            lv_obj_set_style_text_color(lbl_time_left, COL_TEXT_DIM, 0);
-        }
-        set_label_text_if_changed(lbl_time_left, buf);
-    }
+    dashboard_model_t m = {0};
+    fill_dev_selector(&m);
 
-    // Battery info
-    snprintf(buf, sizeof(buf), "%.1f V   %+.1f A",
-             (double)lps.battery_voltage_v, (double)lps.battery_current_a);
-    set_label_text_if_changed(lbl_batt_info, buf);
+    m.is_bms            = (dt == DEV_BMS);
+    m.soc_percent       = lps.soc_percent;
+    m.battery_current_a = lps.battery_current_a;
+    m.soc_time_min      = lps.soc_time_min;
+    m.battery_voltage_v = lps.battery_voltage_v;
 
-    // Toggle buttons
-    device_type_t cur_dev_type = DEV_UNKNOWN;
-    if (selected_unit >= 0) cur_dev_type = unit_table[selected_unit].device_type;
+    m.inverter_state  = lps.inverter_state;   m.inverter_failure  = lps.inverter_failure;
+    m.dc_output_state = lps.dc_output_state;  m.dc_output_failure = lps.dc_output_failure;
+    m.charger_state   = lps.charger_state;    m.charger_failure   = lps.charger_failure;
+    m.dc_input_state  = lps.dc_input_state;   m.dc_input_failure  = lps.dc_input_failure;
+    m.solar_state     = lps.solar_state;      m.solar_failure     = lps.solar_failure;
 
-    bool layout_bms = (cur_dev_type == DEV_BMS);
-    if (!dashboard_layout_initialized || dashboard_layout_bms != layout_bms) {
-        if (layout_bms) {
-            lv_obj_add_flag(btn_inv_toggle, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_size(btn_dcout_toggle, 600, 56);
-            lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_MID, 0, -16);
-        } else {
-            lv_obj_clear_flag(btn_inv_toggle, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_size(btn_inv_toggle, 300, 56);
-            lv_obj_align(btn_inv_toggle, LV_ALIGN_BOTTOM_LEFT, 100, -16);
-            lv_obj_set_size(btn_dcout_toggle, 300, 56);
-            lv_obj_align(btn_dcout_toggle, LV_ALIGN_BOTTOM_RIGHT, -100, -16);
-        }
-        dashboard_layout_initialized = true;
-        dashboard_layout_bms = layout_bms;
-    }
+    m.dc_output_voltage_v = lps.dc_output_voltage_v;
+    m.dc_output_current_a = lps.dc_output_current_a;
+    m.solar_current_a     = lps.solar_current_a;
+    m.ac_output_power_w   = lps.ac_output_power_w;
+    m.ac_output_voltage_v = lps.ac_output_voltage_v;
+    m.ac_output_current_a = lps.ac_output_current_a;
+    m.ac_input_power_w    = lps.ac_input_power_w;
+    m.ac_input_voltage_v  = lps.ac_input_voltage_v;
+    m.ac_input_current_a  = lps.ac_input_current_a;
 
-    // Inverter state
-    if (cur_dev_type != DEV_BMS) {
-        lv_color_t bg, border, txt_col;
-        const char *text;
-        int8_t  st = lps.inverter_state;
-        uint8_t fl = lps.inverter_failure;
-        if (fl >= 2 && st >= 1) {
-            bg = (fl >= 3) ? COL_RED : COL_ORANGE; border = bg;
-            txt_col = lv_color_hex(0xffffff); text = LV_SYMBOL_POWER " INVERTER  !";
-        } else if (st >= 5) {
-            bg = COL_GREEN; border = COL_GREEN;
-            txt_col = lv_color_hex(0xffffff); text = LV_SYMBOL_POWER " INVERTER ON";
-        } else if (st >= 1) {
-            bg = COL_BG_CARD; border = COL_ORANGE;
-            txt_col = COL_ORANGE; text = LV_SYMBOL_POWER " INVERTER ...";
-        } else {
-            bg = COL_BG_CARD; border = COL_TEXT_DIM;
-            txt_col = COL_TEXT_DIM; text = LV_SYMBOL_POWER " INVERTER";
-        }
-        lv_obj_set_style_bg_color(btn_inv_toggle, bg, 0);
-        lv_obj_set_style_border_color(btn_inv_toggle, border, 0);
-        set_label_text_if_changed(lbl_inv_toggle, text);
-        lv_obj_set_style_text_color(lbl_inv_toggle, txt_col, 0);
-    }
+    m.error_count    = lps.failure_code_count;
+    m.error_critical = (lps.failure_level >= FL_SIMPLE_FAILURE);
 
-    // DC Output state
-    {
-        lv_color_t bg, border, txt_col;
-        const char *text;
-        int8_t  st = lps.dc_output_state;
-        uint8_t fl = lps.dc_output_failure;
-        if (fl >= 2 && st >= 1) {
-            bg = (fl >= 3) ? COL_RED : COL_ORANGE; border = bg;
-            txt_col = lv_color_hex(0xffffff); text = LV_SYMBOL_DOWNLOAD " DC OUT  !";
-        } else if (st >= 5) {
-            bg = COL_GREEN; border = COL_GREEN;
-            txt_col = lv_color_hex(0xffffff); text = LV_SYMBOL_DOWNLOAD " DC OUT ON";
-        } else if (st >= 1) {
-            bg = COL_BG_CARD; border = COL_ORANGE;
-            txt_col = COL_ORANGE; text = LV_SYMBOL_DOWNLOAD " DC OUT ...";
-        } else {
-            bg = COL_BG_CARD; border = COL_TEXT_DIM;
-            txt_col = COL_TEXT_DIM; text = LV_SYMBOL_DOWNLOAD " DC OUT";
-        }
-        lv_obj_set_style_bg_color(btn_dcout_toggle, bg, 0);
-        lv_obj_set_style_border_color(btn_dcout_toggle, border, 0);
-        set_label_text_if_changed(lbl_dcout_toggle, text);
-        lv_obj_set_style_text_color(lbl_dcout_toggle, txt_col, 0);
-    }
-
-    // Charging source icons
-    if (cur_dev_type == DEV_BMS) {
-        lv_obj_add_flag(lbl_icon_ac, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_icon_dc, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_icon_solar, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_t *icons[] = {lbl_icon_ac, lbl_icon_dc, lbl_icon_solar};
-        int8_t  states[]   = {lps.charger_state, lps.dc_input_state, lps.solar_state};
-        uint8_t failures[] = {lps.charger_failure, lps.dc_input_failure, lps.solar_failure};
-        lv_color_t ok_colors[] = {COL_GREEN, COL_GREEN, COL_SOLAR};
-        const char *texts_ok[]   = {LV_SYMBOL_CHARGE " AC", LV_SYMBOL_UPLOAD " DC", LV_SYMBOL_IMAGE " Solar"};
-        const char *texts_err[]  = {LV_SYMBOL_CHARGE " AC !", LV_SYMBOL_UPLOAD " DC !", LV_SYMBOL_IMAGE " Solar !"};
-        const char *texts_wait[] = {LV_SYMBOL_CHARGE " AC ...", LV_SYMBOL_UPLOAD " DC ...", LV_SYMBOL_IMAGE " Solar ..."};
-
-        bool visible[3];
-        for (int i = 0; i < 3; i++) {
-            visible[i] = (states[i] >= 1);
-            if (visible[i]) {
-                lv_color_t col; const char *txt;
-                if (failures[i] >= 2 && states[i] >= 1) {
-                    col = (failures[i] >= 3) ? COL_RED : COL_ORANGE; txt = texts_err[i];
-                } else if (states[i] >= 3) {
-                    col = ok_colors[i]; txt = texts_ok[i];
-                } else {
-                    col = COL_ORANGE; txt = texts_wait[i];
-                }
-                lv_obj_set_style_text_color(icons[i], col, 0);
-                set_label_text_if_changed(icons[i], txt);
-            }
-        }
-
-        int n_active = 0;
-        for (int i = 0; i < 3; i++) if (visible[i]) n_active++;
-        int spacing = 120;
-        int start_x = -(n_active - 1) * spacing / 2;
-        int pos = 0;
-        for (int i = 0; i < 3; i++) {
-            if (visible[i]) {
-                lv_obj_clear_flag(icons[i], LV_OBJ_FLAG_HIDDEN);
-                lv_obj_align(icons[i], LV_ALIGN_TOP_MID, start_x + pos * spacing, 440);
-                pos++;
-            } else {
-                lv_obj_add_flag(icons[i], LV_OBJ_FLAG_HIDDEN);
-            }
-        }
-    }
-
-    // Error badge
-    if (lps.failure_code_count > 0) {
-        lv_obj_clear_flag(btn_error_badge, LV_OBJ_FLAG_HIDDEN);
-        lv_color_t badge_col = COL_ORANGE;
-        if (lps.failure_level >= FL_SIMPLE_FAILURE) badge_col = COL_RED;
-        lv_obj_set_style_bg_color(btn_error_badge, badge_col, 0);
-    } else {
-        lv_obj_add_flag(btn_error_badge, LV_OBJ_FLAG_HIDDEN);
-    }
+    dashboard_ui_update(&m);
 }
 
 // ---------------------------------------------------------------------------
@@ -2969,13 +2603,33 @@ static void update_dashboard(void)
 #define PWR_STARTUP_GRACE_MS  15000   // Don't check idle for first 15s after boot
 #define PWR_IDLE_DEBOUNCE_MS  5000    // Must be idle for 5s straight before sleep
 
+// Standby timing. PWR_SLEEP_POLL_MS is both the touch response latency and the
+// length of each light-sleep slice; the CAN window numbers trade standby
+// current against how fast a unit switching on is noticed.
+#define PWR_SLEEP_POLL_MS          250    // touch poll / light-sleep slice
+#define PWR_CAN_WINDOW_MS          150    // TWAI listening window length
+#define PWR_CAN_WINDOW_PERIOD_MS   3000   // how often the bus is sampled
+#define PWR_CAN_WINDOW_MIN_GAP_MS  1000   // rate limit for CANRX-triggered windows
+
+// CANRX (IO16) as a light-sleep wake source only works on a bus that is
+// actually quiet while the display sleeps. It is not: the LPS/BMS units keep
+// broadcasting their (idle) status, so a level-triggered wake fires on every
+// dominant bit and shreds each 250 ms sleep slice into fragments — and every
+// fragment pays the ~2 ms wake overhead (CONFIG_ESP_SLEEP_WAIT_FLASH_READY_
+// EXTRA_DELAY alone is 2000 us). Measured effect: awake ~80% of the time.
+//
+// The periodic window above replaces it. Wake latency for "a unit switched on"
+// becomes PWR_CAN_WINDOW_PERIOD_MS instead of near-instant, which is the price
+// of sleeping between samples.
+#define PWR_CAN_GPIO_WAKE          0
+
 enum {
     PWR_ACTIVE,         // Normal operation — display on
     PWR_SLEEP_SPLASH,   // Showing "CLAYTON POWER" 2s before sleeping
     PWR_SLEEPING,       // Display off, only CAN polling
     PWR_WAKE_SPLASH,    // Waking up — showing splash for 2s
     PWR_DASHBOARD,      // Dashboard shown for 30s after wake
-    PWR_RELEEP_SPLASH,  // Showing splash 2s before re-sleeping
+    PWR_RESLEEP_SPLASH, // Showing splash 2s before re-sleeping
 };
 
 static int  pwr_state = PWR_ACTIVE;
@@ -2986,6 +2640,52 @@ static uint32_t pwr_idle_since_ms   = 0;    // When idle was first detected
 static bool     pwr_was_idle        = false; // For debounce tracking
 static bool     pwr_skip_grace      = false; // True when waking from deep sleep
 static lv_obj_t *pwr_splash_scr     = NULL;
+static uint32_t last_can_window_ms  = 0;     // Last standby CAN listening window
+
+// Standby instrumentation. sleep_loops counts iterations of the deep-idle
+// branch; can_wake_count how many of those followed a CANRX wake; and
+// can_window_count how many actually brought the bus up. If can_wake_count
+// tracks sleep_loops, the bus is busy enough that the level-triggered wake
+// fires on every sleep attempt and standby current will stay high.
+static uint32_t sleep_loops        = 0;
+static uint32_t can_wake_count     = 0;
+static uint32_t can_window_count   = 0;
+
+// ---------------------------------------------------------------------------
+//  Light-sleep accounting
+//
+//  The only way to know whether automatic light sleep really engages is to ask
+//  the power manager. These totals are cumulative since boot, deliberately NOT
+//  reset per heartbeat: the interesting measurement happens with USB
+//  disconnected (USB Serial/JTAG holds a NO_LIGHT_SLEEP lock while a host is
+//  attached), so the numbers have to survive until the cable is plugged back
+//  in to read them.
+//
+//  Interpretation: in standby, ls_total_us should track wall-clock time almost
+//  1:1. If it stays near zero, something is still holding a PM lock and the
+//  CPU is running flat out.
+// ---------------------------------------------------------------------------
+static volatile int64_t  ls_total_us = 0;
+static volatile uint32_t ls_count    = 0;
+
+static esp_err_t IRAM_ATTR on_light_sleep_exit(int64_t sleep_time_us, void *arg)
+{
+    (void)arg;
+    ls_total_us += sleep_time_us;
+    ls_count++;
+    return ESP_OK;
+}
+
+static void light_sleep_stats_init(void)
+{
+    static esp_pm_sleep_cbs_register_config_t cbs = {
+        .exit_cb       = on_light_sleep_exit,
+        .exit_cb_prior = 100,
+    };
+    esp_err_t err = esp_pm_light_sleep_register_cbs(&cbs);
+    ESP_LOGI(TAG, "[PWR] light-sleep accounting %s",
+             err == ESP_OK ? "enabled" : esp_err_to_name(err));
+}
 
 // Check if ALL connected units are idle (requires real status data)
 static bool lps_is_idle(void)
@@ -3010,6 +2710,28 @@ static bool lps_is_idle(void)
     return any_connected;
 }
 
+// Wake criterion for standby. Deliberately NOT the inverse of lps_is_idle():
+// a unit we have not heard enough from yet counts as "keep sleeping" here,
+// whereas lps_is_idle() treats it as "not idle" so the display stays on while
+// data is still being gathered. The display must not light up merely because
+// there are frames on the bus — only because a unit reports it is running.
+static bool lps_wants_wake(void)
+{
+    for (int i = 0; i < UNIT_TABLE_SIZE; i++) {
+        if (unit_table[i].status != UNIT_ONLINE) continue;
+        lps_data_t *d = &unit_table[i].data;
+        if (!d->connected) continue;
+        if (d->msg_count < 10) continue;          // not enough data to judge
+        if (unit_table[i].device_type == DEV_BMS) {
+            if ((uint8_t)d->operating_state > 0x10) return true;
+        } else if (d->inverter_state >= 1 || d->charger_state >= 1 ||
+                   d->dc_input_state >= 1 || d->dc_output_state >= 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Check if touch panel was recently active (within last 1s)
 // Uses LVGL display activity tracker — far more reliable than polling
 // instantaneous indev->proc.state which can be missed between ticks.
@@ -3031,7 +2753,10 @@ static bool touch_is_pressed_direct(void)
 
     bool pressed = waveshare_touch_is_pressed();
 
-    if (pressed || (poll_count % 5) == 1) {
+    // This runs 4x per second throughout standby. Log real touches, plus a
+    // rare keep-alive — formatting and pushing a line to the console on every
+    // poll is wasted CPU in the one place where CPU time costs battery.
+    if (pressed || (poll_count % 240) == 1) {
         ESP_LOGI(TAG, "[TOUCH] poll #%lu: pressed=%d",
                  (unsigned long)poll_count, pressed);
     }
@@ -3046,7 +2771,7 @@ static void pwr_show_splash(void)
 
     pwr_splash_scr = lv_obj_create(scr);
     lv_obj_remove_style_all(pwr_splash_scr);
-    lv_obj_set_size(pwr_splash_scr, 1024, 600);
+    lv_obj_set_size(pwr_splash_scr, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(pwr_splash_scr, COL_BG_DARK, 0);
     lv_obj_set_style_bg_opa(pwr_splash_scr, LV_OPA_COVER, 0);
     lv_obj_clear_flag(pwr_splash_scr, LV_OBJ_FLAG_SCROLLABLE);
@@ -3098,37 +2823,63 @@ static void pwr_display_off(void)
     //    shutdown and the IC stays at ~50 mA instead of 50 µA standby.
     vTaskDelay(pdMS_TO_TICKS(120));
 
-    // 4) Float all LCD GPIO pins — ST7262 is now in standby, safe to release
+    // 4) Delete the RGB panel — stops the LCD DMA and releases the esp_lcd
+    //    driver's NO_LIGHT_SLEEP PM lock (held for the panel's whole
+    //    lifecycle; without this, auto light sleep can never engage).
+    waveshare_lcd_panel_sleep();
+
+    // 5) Drive all LCD GPIO pins low — ST7262 is in standby, avoids
+    //    shoot-through in its input buffers
     waveshare_lcd_pins_float();
 
-    // 5) Assert LCD_RST (IO3=LOW) — safe AFTER T1 discharge is complete.
+    // 6) Assert LCD_RST (IO3=LOW) — safe AFTER T1 discharge is complete.
     //    ST7262 in HW reset draws far less than standby.
     waveshare_lcd_reset_assert();
 
-    // 6) GT911 touch stays running — needed for reliable touch-wake detection.
+    // 7) GT911 touch stays running — needed for reliable touch-wake detection.
 
-    // 7) Set CH422G outputs low (except CTP_RST which stays HIGH for GT911)
+    // 8) Set CH422G outputs low (except CTP_RST which stays HIGH for GT911)
     waveshare_ch422g_all_low();
 
-    // 8) Stop TWAI — releases PM lock
-    twai_stop();
-    ESP_LOGI(TAG, "[PWR] TWAI stopped");
+    // 9) Tear down TWAI completely. twai_stop() alone keeps the driver's
+    //    ESP_PM_APB_FREQ_MAX lock, which blocks light sleep outright; only
+    //    twai_driver_uninstall() releases it. CANRX then becomes a plain GPIO
+    //    and is armed as a light-sleep wake source instead.
+    can_bus_stop();
+    can_wake_source_enable(true);
+    ESP_LOGI(TAG, "[PWR] TWAI uninstalled, CANRX (IO%d) armed as wake source",
+             CONFIG_EXAMPLE_RX_GPIO_NUM);
 
-    // 9) Drop CPU to 80 MHz — BLE needs APB clock, can't go to 10 MHz
+    // 10) Slow BLE advertising — cuts radio duty ~8x while still discoverable
+    ble_gateway_set_standby(true);
+
+    // 11) Enable DFS + automatic light sleep. The chip now sleeps between
+    //     FreeRTOS ticks (tickless idle); the BLE controller wakes itself for
+    //     each advertising/connection event (BT modem sleep, main-XTAL lpclk),
+    //     and the sleep loop's vTaskDelay() gaps become real light sleep.
     esp_pm_config_t pm_cfg = {
         .max_freq_mhz = 80,
-        .min_freq_mhz = 80,
-        .light_sleep_enable = false,
+        .min_freq_mhz = 40,
+        .light_sleep_enable = true,
     };
-    esp_pm_configure(&pm_cfg);
-    ESP_LOGI(TAG, "[PWR] CPU 80 MHz — sleeping (BLE active)");
+    esp_err_t pm_ret = esp_pm_configure(&pm_cfg);
+    ESP_LOGI(TAG, "[PWR] DFS 80/40 MHz + auto light sleep (ret=%s) — sleeping (BLE active)",
+             esp_err_to_name(pm_ret));
 
+    // Any lock listed here blocks light sleep (NO_LIGHT_SLEEP outright,
+    // APB_FREQ_MAX by forcing PM_MODE_APB_MAX). Expect this to be empty apart
+    // from short-lived BLE/I2C acquisitions; a permanent entry means standby
+    // current will stay at active-mode levels.
+    ESP_LOGI(TAG, "[PWR] PM locks held entering standby:");
+    esp_pm_dump_locks(stdout);
+
+    last_can_window_ms = now_ms();
     pwr_state = PWR_SLEEPING;
 }
 
 static void pwr_display_on(void)
 {
-    // 1) Restore CPU clock to 240MHz
+    // 1) Restore CPU clock to 240MHz, disable light sleep
     esp_pm_config_t pm_cfg = {
         .max_freq_mhz = 240,
         .min_freq_mhz = 240,
@@ -3137,8 +2888,10 @@ static void pwr_display_on(void)
     esp_err_t ret = esp_pm_configure(&pm_cfg);
     ESP_LOGI(TAG, "[PWR] CPU 240MHz (ret=%s)", esp_err_to_name(ret));
 
-    // 2) Start TWAI
-    twai_start();
+    // 2) Restore fast BLE advertising + bring the CAN bus back up
+    ble_gateway_set_standby(false);
+    can_wake_source_enable(false);
+    can_hmi_bus_start();
 
     // 3) Wake CH422G + release LCD_RST + CTP_RST (DISP stays LOW)
     waveshare_ch422g_wake();
@@ -3147,8 +2900,9 @@ static void pwr_display_on(void)
 
     // 4) GT911 was kept running — no wake needed.
 
-    // 5) Restore LCD pins + restart panel DMA
-    waveshare_lcd_pins_drive();
+    // 5) Recreate the RGB panel (deleted in standby) and rebind LVGL to the
+    //    new framebuffers — forces a full redraw of the current screen
+    waveshare_lcd_panel_wake();
 
     // 6) Resume LVGL task — restarts rendering + touch polling
     lvgl_port_resume();
@@ -3186,7 +2940,7 @@ static bool pwr_management_tick(void)
         pwr_last_touch_ms = now;
         pwr_was_idle = false;
 
-        if (pwr_state == PWR_SLEEP_SPLASH || pwr_state == PWR_RELEEP_SPLASH) {
+        if (pwr_state == PWR_SLEEP_SPLASH || pwr_state == PWR_RESLEEP_SPLASH) {
             pwr_remove_splash();
             pwr_state = PWR_DASHBOARD;
             ESP_LOGI(TAG, "[PWR] BLE passthrough active — canceling sleep splash");
@@ -3242,7 +2996,7 @@ static bool pwr_management_tick(void)
         return true;
 
     case PWR_SLEEPING: {
-        bool sys_active = !lps_is_idle();
+        bool sys_active = lps_wants_wake();
         bool touch = touch_is_pressed_direct();
         if (sys_active || touch) {
             ESP_LOGI(TAG, "[PWR] Wake (sys_active=%d, touch=%d)", sys_active, touch);
@@ -3283,13 +3037,13 @@ static bool pwr_management_tick(void)
         if (now - pwr_last_touch_ms >= PWR_DASHBOARD_TIMEOUT) {
             pwr_show_splash();
             pwr_state_start_ms = now;
-            pwr_state = PWR_RELEEP_SPLASH;
+            pwr_state = PWR_RESLEEP_SPLASH;
             ESP_LOGI(TAG, "[PWR] 30s timeout — splash before re-sleep");
             return true;
         }
         return false;
 
-    case PWR_RELEEP_SPLASH:
+    case PWR_RESLEEP_SPLASH:
         if (!lps_is_idle()) {
             pwr_remove_splash();
             pwr_state = PWR_ACTIVE;
@@ -3342,7 +3096,7 @@ static void ble_cmd_handler(uint8_t cmd, const uint8_t *payload, uint16_t len)
             if (should_log_boot_can_frame(can_id)) {
                 log_boot_diag_frame("BLE->CAN", can_id, &payload[5], dlc);
             }
-            can_send_raw_ext(can_id, &payload[5], dlc);
+            can_send_raw(can_id, &payload[5], dlc);
         }
         break;
 
@@ -3360,7 +3114,7 @@ static void ble_cmd_handler(uint8_t cmd, const uint8_t *payload, uint16_t len)
                 if (should_log_boot_can_frame(can_id)) {
                     log_boot_diag_frame("BLE->CAN batch", can_id, &payload[offset + 5], dlc);
                 }
-                can_send_raw_ext(can_id, &payload[offset + 5], dlc);
+                can_send_raw(can_id, &payload[offset + 5], dlc);
                 offset += 13;
                 sent++;
             }
@@ -3407,13 +3161,15 @@ void can_hmi_init(void)
     ble_gateway_set_cmd_callback(ble_cmd_handler);
     create_ble_pin_popup(scr, ble_pin);
 
-    ESP_LOGI(TAG, "CAN HMI UI initialized (1024x600), BLE PIN=%06lu", (unsigned long)ble_pin);
+    ESP_LOGI(TAG, "CAN HMI UI initialized (%dx%d), BLE PIN=%06lu",
+             SCREEN_W, SCREEN_H, (unsigned long)ble_pin);
 }
 
 void can_hmi_task(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "CAN HMI task started");
+    light_sleep_stats_init();
 
     uint32_t last_ui_update = 0;
     uint32_t last_busoff_check = 0;
@@ -3438,42 +3194,83 @@ void can_hmi_task(void *arg)
         }
 
         // =============================================================
-        // Sleep mode: brief TWAI poll + touch, CPU at 80MHz
-        // BLE connected: faster cycle so command/response works
+        // Standby.
+        //
+        // BLE connected: keep the CAN bus up so settings and passthrough work.
+        // A phone session is short and interactive, so power is not the
+        // priority there.
+        //
+        // Otherwise (deep idle): the TWAI driver stays uninstalled so the
+        // power manager is free to enter light sleep during the vTaskDelay()
+        // at the bottom of this branch. The bus is only brought up for a short
+        // listening window — either because CANRX woke us, or as a periodic
+        // safety net in case the wake was missed.
         // =============================================================
         if (pwr_state == PWR_SLEEPING) {
             bool ble_active = ble_gateway_is_connected();
 
-            esp_pm_config_t pm_up = { .max_freq_mhz = 80, .min_freq_mhz = 80, .light_sleep_enable = false };
-            esp_pm_configure(&pm_up);
+            if (ble_active) {
+                can_wake_source_enable(false);
+                can_hmi_bus_start();
+                vTaskDelay(pdMS_TO_TICKS(50));
 
-            twai_start();
-            vTaskDelay(pdMS_TO_TICKS(ble_active ? 50 : 10));
-
-            twai_message_t rx_msg;
-            while (twai_receive(&rx_msg, 0) == ESP_OK) {
-                if (!rx_msg.rtr)
-                    decode_can_message(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
-            }
-
-            // Process staggered settings CAN requests.
-            if (ble_active && !raw_passthrough_active) {
-                uint32_t now_q = now_ms();
-                if (req_queue_head < req_queue_count &&
-                    (now_q - req_queue_last_ms >= REQ_SPACING_MS)) {
-                    can_req_t *r = &req_queue[req_queue_head];
-                    can_send_command(r->cmd, r->block, r->id, r->value);
-                    pending_track_sent(r->cmd, r->block, r->id, r->value);
-                    req_queue_head++;
-                    req_queue_last_ms = now_q;
-                    if (req_queue_head >= req_queue_count) {
-                        reset_request_queue();
-                    }
+                twai_message_t rx_msg;
+                while (twai_receive(&rx_msg, 0) == ESP_OK) {
+                    if (!rx_msg.rtr)
+                        decode_can_message(rx_msg.identifier, rx_msg.data,
+                                           rx_msg.data_length_code);
                 }
-                process_pending_timeouts();
-            }
 
-            twai_stop();
+                // Process staggered settings CAN requests.
+                if (!raw_passthrough_active) {
+                    uint32_t now_q = now_ms();
+                    if (req_queue_head < req_queue_count &&
+                        (now_q - req_queue_last_ms >= REQ_SPACING_MS)) {
+                        can_req_t *r = &req_queue[req_queue_head];
+                        can_send_command(r->cmd, r->block, r->id, r->value);
+                        pending_track_sent(r->cmd, r->block, r->id, r->value);
+                        req_queue_head++;
+                        req_queue_last_ms = now_q;
+                        if (req_queue_head >= req_queue_count) {
+                            reset_request_queue();
+                        }
+                    }
+                    process_pending_timeouts();
+                }
+            } else {
+                // --- Deep idle: CAN listening window, if due ---------------
+                uint32_t now_w = now_ms();
+                bool woke_on_can =
+                    (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_GPIO)) != 0;
+                bool window_due =
+                    (now_w - last_can_window_ms >= PWR_CAN_WINDOW_PERIOD_MS);
+                bool rate_ok =
+                    (now_w - last_can_window_ms >= PWR_CAN_WINDOW_MIN_GAP_MS);
+
+                sleep_loops++;
+                if (woke_on_can) can_wake_count++;
+
+                if (window_due || (woke_on_can && rate_ok)) {
+                    can_window_count++;
+                    can_wake_source_enable(false);
+                    if (can_hmi_bus_start() == ESP_OK) {
+                        uint32_t t0 = now_ms();
+                        do {
+                            twai_message_t rx_msg;
+                            while (twai_receive(&rx_msg, 0) == ESP_OK) {
+                                if (!rx_msg.rtr)
+                                    decode_can_message(rx_msg.identifier,
+                                                       rx_msg.data,
+                                                       rx_msg.data_length_code);
+                            }
+                            vTaskDelay(pdMS_TO_TICKS(10));
+                        } while (now_ms() - t0 < PWR_CAN_WINDOW_MS);
+                    }
+                    can_bus_stop();
+                    can_wake_source_enable(true);
+                    last_can_window_ms = now_ms();
+                }
+            }
 
             // Touch + state machine
             if (lvgl_port_lock(10)) {
@@ -3484,14 +3281,27 @@ void can_hmi_task(void *arg)
             // Heartbeat
             uint32_t now_hb = now_ms();
             if (now_hb - last_heartbeat >= 10000) {
-                ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d ble=%d", (unsigned long)now_hb, pwr_state, ble_active);
+                int64_t up_us = esp_timer_get_time();
+                int64_t ls_us = ls_total_us;
+                ESP_LOGI(TAG,
+                         "[HB] alive t=%lu pwr=%d ble=%d twai=%d | 10s: loops=%lu canwake=%lu win=%lu"
+                         " | lightsleep: n=%lu total=%llds = %lu%% of uptime",
+                         (unsigned long)now_hb, pwr_state, ble_active,
+                         twai_installed, (unsigned long)sleep_loops,
+                         (unsigned long)can_wake_count,
+                         (unsigned long)can_window_count,
+                         (unsigned long)ls_count,
+                         (long long)(ls_us / 1000000),
+                         (unsigned long)(up_us > 0 ? (ls_us * 100) / up_us : 0));
+                sleep_loops = can_wake_count = can_window_count = 0;
                 last_heartbeat = now_hb;
             }
 
             if (pwr_state == PWR_SLEEPING) {
-                esp_pm_config_t pm_dn = { .max_freq_mhz = 80, .min_freq_mhz = 80, .light_sleep_enable = false };
-                esp_pm_configure(&pm_dn);
-                vTaskDelay(pdMS_TO_TICKS(ble_active ? 50 : 500));
+                // With no PM lock held this delay is where the chip actually
+                // light-sleeps. It also sets the touch response latency.
+                vTaskDelay(pdMS_TO_TICKS(ble_active ? 50
+                                                    : PWR_SLEEP_POLL_MS));
             }
             continue;
         }
@@ -3581,12 +3391,10 @@ void can_hmi_task(void *arg)
                             lv_obj_add_flag(error_popup, LV_OBJ_FLAG_HIDDEN);
                         }
                     } else {
-                        if (check_for_error_popup()) {
-                            uint8_t code = get_popup_error_code();
-                            if (code != 0) {
-                                show_error_popup(code);
-                                buzzer_alarm();
-                            }
+                        uint8_t code = get_popup_error_code();
+                        if (code != 0) {
+                            show_error_popup(code);
+                            buzzer_alarm();
                         }
                     }
 
@@ -3607,15 +3415,10 @@ void can_hmi_task(void *arg)
         uint32_t now_ble = now_ms();
         if (now_ble - last_ble_status_update >= 1000) {
             if (lvgl_port_lock(5)) {
-                if (ble_gateway_is_connected()) {
-                    lv_obj_set_style_text_color(ble_status_icon,
-                        lv_color_hex(0x2196F3), 0); // blue = connected
-                    if (ble_pin_popup) {
-                        lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
-                    }
-                } else {
-                    lv_obj_set_style_text_color(ble_status_icon,
-                        lv_color_hex(0x555555), 0); // grey = disconnected
+                bool ble_conn = ble_gateway_is_connected();
+                dashboard_ui_set_ble(ble_conn);
+                if (ble_conn && ble_pin_popup) {
+                    lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
                 }
                 lvgl_port_unlock();
             }

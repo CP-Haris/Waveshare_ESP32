@@ -96,18 +96,28 @@ void waveshare_esp32_s3_touch_reset()
     // Reset the touch screen. It is recommended to reset the touch screen before using it.
     i2c_write_byte(0x38, 0x2C);
     esp_rom_delay_us(100 * 1000);
-    gpio_set_level(GPIO_INPUT_IO_4, 0);
+    gpio_set_level(GPIO_INPUT_IO_4, 0);   // INT low during reset -> I2C addr 0x5D
     esp_rom_delay_us(100 * 1000);
     i2c_write_byte(0x38, 0x2E);
     esp_rom_delay_us(200 * 1000);
+
+    // Release CTP_IRQ. From here on it is GT911's OUTPUT (data-ready signal);
+    // leaving the ESP32 driving it push-pull LOW fights the GT911's driver and
+    // burns current continuously. As an input the line is also usable as a
+    // light-sleep wake source.
+    gpio_set_direction(GPIO_INPUT_IO_4, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(GPIO_INPUT_IO_4, GPIO_FLOATING);
 }
 
 #endif
 
 static esp_lcd_panel_handle_t s_panel_handle = NULL;
 
-// Initialize RGB LCD
-esp_err_t waveshare_esp32_s3_rgb_lcd_init()
+/**
+ * Create + init the RGB panel. Shared between cold boot and wake-from-standby
+ * (the panel is deleted in standby to release its NO_LIGHT_SLEEP PM lock).
+ */
+static esp_err_t create_rgb_panel(void)
 {
     ESP_LOGI(TAG, "Install RGB LCD panel driver"); // Log the start of the RGB LCD panel driver installation
     esp_lcd_panel_handle_t panel_handle = NULL;    // Declare a handle for the LCD panel
@@ -172,10 +182,17 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
 
     // Create a new RGB panel with the specified configuration
     ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&panel_config, &panel_handle));
-    s_panel_handle = panel_handle;  // save for restart after light sleep
+    s_panel_handle = panel_handle;
 
     ESP_LOGI(TAG, "Initialize RGB LCD panel");         // Log the initialization of the RGB LCD panel
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle)); // Initialize the LCD panel
+    return ESP_OK;
+}
+
+// Initialize RGB LCD + touch + LVGL (cold boot)
+esp_err_t waveshare_esp32_s3_rgb_lcd_init()
+{
+    ESP_ERROR_CHECK(create_rgb_panel());
 
     esp_lcd_touch_handle_t tp_handle = NULL; // Declare a handle for the touch panel
 #if CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
@@ -211,13 +228,14 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
     ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp_handle)); // Create new I2C GT911 touch controller
 #endif                                                                               // CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
 
-    ESP_ERROR_CHECK(lvgl_port_init(panel_handle, tp_handle)); // Initialize LVGL with the panel and touch handles
+    ESP_ERROR_CHECK(lvgl_port_init(s_panel_handle, tp_handle)); // Initialize LVGL with the panel and touch handles
 
-    // Register callbacks for RGB panel events
+    // Register callbacks for RGB panel events (after lvgl_port_init so the
+    // vsync callback never fires before the LVGL task handle exists)
     esp_lcd_rgb_panel_event_callbacks_t cbs = {
         .on_vsync = rgb_lcd_on_vsync_event, // Callback for vertical sync
     };
-    ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(panel_handle, &cbs, NULL)); // Register event callbacks
+    ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(s_panel_handle, &cbs, NULL)); // Register event callbacks
 
     return ESP_OK; // Return success
 }
@@ -229,7 +247,8 @@ esp_err_t wavesahre_rgb_lcd_bl_on()
     i2c_write_byte(0x24, 0x01);
 
     // Pull the backlight pin high to light the screen backlight
-    i2c_write_byte(0x38, 0x1E);
+    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_DISP | CH422G_LCD_RST |
+                         CH422G_SDCS | CH422G_DI_IDLE);
     return ESP_OK;
 }
 
@@ -240,43 +259,12 @@ esp_err_t wavesahre_rgb_lcd_bl_off()
     i2c_write_byte(0x24, 0x01);
 
     // Turn off the screen backlight by pulling the backlight pin low
-    i2c_write_byte(0x38, 0x1A);
+    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_LCD_RST | CH422G_SDCS |
+                         CH422G_DI_IDLE);
     return ESP_OK;
 }
 
-/******************************* Restart LCD panel DMA (after light sleep) ********/
-esp_err_t waveshare_lcd_restart(void)
-{
-    if (s_panel_handle == NULL) return ESP_ERR_INVALID_STATE;
-    return esp_lcd_rgb_panel_restart(s_panel_handle);
-}
-
-/******************************* LCD hardware reset via CH422G **********************
- * CH422G IO3 (0x08) = LCD_RST on this board.
- * Asserting reset puts the ST7262 LCD driver IC into hardware reset,
- * which drastically reduces its current draw through VCC.
- * GT911 remains operational (IO1 = TP_RST stays deasserted).
- */
-esp_err_t waveshare_lcd_reset_assert(void)
-{
-    i2c_write_byte(0x24, 0x01);   // CH422G output mode
-    // IO1=1(TP_RST released) + IO4=1(SD/INT) → IO3=0 means LCD_RST asserted
-    i2c_write_byte(0x38, 0x12);   // 0x12 = IO1 + IO4, LCD_RST=0, BL=0
-    ESP_LOGI(TAG, "LCD RST asserted (ST7262 in HW reset)");
-    return ESP_OK;
-}
-
-esp_err_t waveshare_lcd_reset_release(void)
-{
-    i2c_write_byte(0x24, 0x01);   // CH422G output mode
-    // IO1=1 + IO3=1 + IO4=1, BL still off
-    i2c_write_byte(0x38, 0x1A);   // 0x1A = IO1 + IO3 + IO4
-    ESP_LOGI(TAG, "LCD RST released");
-    vTaskDelay(pdMS_TO_TICKS(20)); // Let ST7262 come out of reset
-    return ESP_OK;
-}
-
-/******************************* LCD pin isolation for sleep ************************/
+/* All LCD output pins (used for sleep isolation + wake restore) */
 static const int lcd_output_pins[] = {
     EXAMPLE_LCD_IO_RGB_PCLK,   EXAMPLE_LCD_IO_RGB_HSYNC,
     EXAMPLE_LCD_IO_RGB_VSYNC,  EXAMPLE_LCD_IO_RGB_DE,
@@ -291,6 +279,75 @@ static const int lcd_output_pins[] = {
 };
 #define LCD_PIN_COUNT (sizeof(lcd_output_pins) / sizeof(lcd_output_pins[0]))
 
+/******************************* Panel delete / recreate for standby ***************
+ * The esp_lcd RGB driver holds an ESP_PM_NO_LIGHT_SLEEP power-management lock
+ * for the panel's entire lifecycle, so automatic light sleep can never engage
+ * while the panel exists. In standby we therefore DELETE the panel (stops the
+ * DMA, frees the PSRAM framebuffers, releases the PM lock) and recreate it on
+ * wake, rebinding LVGL to the new framebuffers.
+ */
+esp_err_t waveshare_lcd_panel_sleep(void)
+{
+    if (s_panel_handle == NULL) return ESP_ERR_INVALID_STATE;
+    esp_err_t ret = esp_lcd_panel_del(s_panel_handle);
+    s_panel_handle = NULL;
+    ESP_LOGI(TAG, "RGB panel deleted (DMA stopped, PM lock released)");
+    return ret;
+}
+
+esp_err_t waveshare_lcd_panel_wake(void)
+{
+    if (s_panel_handle != NULL) return ESP_OK;   // already alive
+
+    // Return output-enable control of the LCD pins to the peripheral
+    // (undo the software-OE hijack from waveshare_lcd_pins_float)
+    for (int i = 0; i < LCD_PIN_COUNT; i++) {
+        uint32_t reg = GPIO_FUNC0_OUT_SEL_CFG_REG + lcd_output_pins[i] * 4;
+        REG_CLR_BIT(reg, BIT(10));
+    }
+
+    esp_err_t ret = create_rgb_panel();
+    if (ret != ESP_OK) return ret;
+
+    // Re-register vsync callback (LVGL task already exists on wake)
+    esp_lcd_rgb_panel_event_callbacks_t cbs = {
+        .on_vsync = rgb_lcd_on_vsync_event,
+    };
+    ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(s_panel_handle, &cbs, NULL));
+
+    // Point LVGL at the new framebuffers and force a full redraw
+    lvgl_port_rebind_panel(s_panel_handle);
+    ESP_LOGI(TAG, "RGB panel recreated + LVGL rebound");
+    return ESP_OK;
+}
+
+/******************************* LCD hardware reset via CH422G **********************
+ * CH422G IO3 (0x08) = LCD_RST on this board.
+ * Asserting reset puts the ST7262 LCD driver IC into hardware reset,
+ * which drastically reduces its current draw through VCC.
+ * GT911 remains operational (IO1 = TP_RST stays deasserted).
+ */
+esp_err_t waveshare_lcd_reset_assert(void)
+{
+    i2c_write_byte(0x24, 0x01);   // CH422G output mode
+    // IO1=1(TP_RST released) + IO4=1(SD/INT) → IO3=0 means LCD_RST asserted
+    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_SDCS | CH422G_DI_IDLE);
+    ESP_LOGI(TAG, "LCD RST asserted (ST7262 in HW reset)");
+    return ESP_OK;
+}
+
+esp_err_t waveshare_lcd_reset_release(void)
+{
+    i2c_write_byte(0x24, 0x01);   // CH422G output mode
+    // IO1=1 + IO3=1 + IO4=1, BL still off
+    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_LCD_RST | CH422G_SDCS |
+                         CH422G_DI_IDLE);
+    ESP_LOGI(TAG, "LCD RST released");
+    vTaskDelay(pdMS_TO_TICKS(20)); // Let ST7262 come out of reset
+    return ESP_OK;
+}
+
+/******************************* LCD pin isolation for sleep ************************/
 void waveshare_lcd_pins_float(void)
 {
     for (int i = 0; i < LCD_PIN_COUNT; i++) {
@@ -309,25 +366,6 @@ void waveshare_lcd_pins_float(void)
             REG_WRITE(GPIO_ENABLE1_W1TS_REG, 1U << (pin - 32));
     }
     ESP_LOGI(TAG, "LCD pins driven LOW -- no shoot-through");
-}
-
-void waveshare_lcd_pins_drive(void)
-{
-    for (int i = 0; i < LCD_PIN_COUNT; i++) {
-        int pin = lcd_output_pins[i];
-        // Enable output driver
-        if (pin < 32)
-            REG_WRITE(GPIO_ENABLE_W1TS_REG, 1U << pin);
-        else
-            REG_WRITE(GPIO_ENABLE1_W1TS_REG, 1U << (pin - 32));
-        // Return OE to LCD_CAM peripheral (clear bit 10)
-        uint32_t reg = GPIO_FUNC0_OUT_SEL_CFG_REG + pin * 4;
-        REG_CLR_BIT(reg, BIT(10));
-    }
-    // Restart DMA to re-sync LCD timing
-    if (s_panel_handle)
-        esp_lcd_rgb_panel_restart(s_panel_handle);
-    ESP_LOGI(TAG, "LCD pins restored + panel restarted");
 }
 
 /******************************* GT911 sleep / wake ********************************/
@@ -378,9 +416,10 @@ esp_err_t waveshare_gt911_wake(void)
 esp_err_t waveshare_ch422g_all_low(void)
 {
     i2c_write_byte(0x24, 0x01);   // Push-pull output mode
-    // IO1(CTP_RST)=HIGH so GT911 stays in SW sleep (not HW reset).
-    // IO2(DISP)=LOW, IO3(LCD_RST)=LOW, IO4(SDCS)=LOW, rest LOW.
-    i2c_write_byte(0x38, 0x02);   // 0x02 = only IO1 HIGH
+    // IO1(CTP_RST)=HIGH so GT911 stays operational (not HW reset).
+    // IO2(DISP)=LOW, IO3(LCD_RST)=LOW, IO4(SDCS)=LOW.
+    // IO0/IO5 (DI0/DI1) are held HIGH — see CH422G_DI_IDLE.
+    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_DI_IDLE);
     ESP_LOGI(TAG, "CH422G IOs low (CTP_RST kept HIGH)");
     return ESP_OK;
 }
@@ -423,8 +462,10 @@ bool waveshare_touch_is_pressed(void)
     esp_err_t ret = i2c_master_transmit_receive(dev, reg, 2, &val, 1,
                                                  I2C_MASTER_TIMEOUT_MS);
 
+    // Only log real touches and the occasional keep-alive: this runs several
+    // times per second in standby, and console traffic is not free there.
     static uint32_t diag_cnt = 0;
-    if (++diag_cnt % 10 == 1 || val != 0) {
+    if (val != 0 || ret != ESP_OK || ++diag_cnt % 240 == 1) {
         ESP_LOGI(TAG, "[TOUCH] reg 0x814E=0x%02X ret=%s", val, esp_err_to_name(ret));
     }
 

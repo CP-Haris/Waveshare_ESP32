@@ -50,6 +50,7 @@ static uint32_t passkey = 0;
 static ble_cmd_callback_t cmd_callback = NULL;
 static ble_pairing_callback_t pairing_callback = NULL;
 static bool ble_ready = false;
+static bool standby_mode = false;   // true = slow advertising (display sleeping)
 
 void ble_store_config_init(void);
 
@@ -228,11 +229,13 @@ static void start_advertise(void)
 {
     int rc;
 
+    // Standby uses slow advertising (800-1000ms) to cut radio-on time ~8x;
+    // active mode uses 100-150ms for snappy discovery. Units: 0.625ms.
     struct ble_gap_adv_params adv_params = {
         .conn_mode = BLE_GAP_CONN_MODE_UND,
         .disc_mode = BLE_GAP_DISC_MODE_GEN,
-        .itvl_min = 160,   // 100ms
-        .itvl_max = 240,   // 150ms
+        .itvl_min = standby_mode ? 1280 : 160,
+        .itvl_max = standby_mode ? 1600 : 240,
         .channel_map = 7,  // All 3 advertising channels (37, 38, 39)
     };
 
@@ -251,11 +254,7 @@ static void start_advertise(void)
 
     // Scan response with service UUID
     struct ble_hs_adv_fields rsp = {0};
-    static const ble_uuid128_t rsp_uuid = BLE_UUID128_INIT(
-        0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00,
-        0x00, 0x80, 0x00, 0x10, 0x00, 0x00,
-        0x00, 0x10, 0x00, 0x00);
-    rsp.uuids128 = &rsp_uuid;
+    rsp.uuids128 = &svc_uuid;
     rsp.num_uuids128 = 1;
     rsp.uuids128_is_complete = 1;
 
@@ -387,9 +386,17 @@ bool ble_gateway_is_connected(void)
     return ble_ready && conn_handle != BLE_HS_CONN_HANDLE_NONE && client_subscribed;
 }
 
-uint32_t ble_gateway_get_passkey(void)
+void ble_gateway_set_standby(bool standby)
 {
-    return passkey;
+    if (standby_mode == standby) return;
+    standby_mode = standby;
+
+    // Re-start advertising with the new interval (only relevant when not
+    // connected — advertising is stopped while a client is connected).
+    if (ble_ready && conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+        ble_gap_adv_stop();
+        start_advertise();
+    }
 }
 
 void ble_gateway_set_cmd_callback(ble_cmd_callback_t cb)

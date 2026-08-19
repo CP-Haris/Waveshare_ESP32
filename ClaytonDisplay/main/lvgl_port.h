@@ -137,7 +137,7 @@ esp_err_t lvgl_port_init(esp_lcd_panel_handle_t lcd_handle, esp_lcd_touch_handle
 /**
  * @brief Take LVGL mutex
  *
- * @param[in] timeout_ms: Timeout in [ms]. 0 will block indefinitely.
+ * @param[in] timeout_ms: Timeout in [ms]. Negative values block indefinitely; 0 returns immediately if the mutex is taken.
  *
  * @return
  *      - true:  Mutex was taken
@@ -169,6 +169,13 @@ void lvgl_port_suspend(void);
  * @brief Resume the LVGL task after a suspend.
  */
 void lvgl_port_resume(void);
+
+/**
+ * @brief Number of completed display flushes since boot. Wake-from-standby
+ *        polls this to hold the backlight off until LVGL has actually put a
+ *        frame in the (recreated) framebuffer.
+ */
+uint32_t lvgl_port_flush_count(void);
 
 /**
  * @brief Rebind LVGL to a recreated RGB panel: updates the panel handle and

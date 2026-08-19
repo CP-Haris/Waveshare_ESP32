@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -18,6 +19,7 @@
 static const char *TAG = "lv_port";                      // Tag for logging
 static SemaphoreHandle_t lvgl_mux;                       // LVGL mutex for synchronization
 static TaskHandle_t lvgl_task_handle = NULL;             // Handle for the LVGL task
+static volatile uint32_t flush_count = 0;                // Completed flushes (see lvgl_port_flush_count)
 
 #if EXAMPLE_LVGL_PORT_ROTATION_DEGREE != 0
 // Function to get the next frame buffer for double buffering
@@ -262,6 +264,7 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
         }
     }
 
+    flush_count++;
     lv_disp_flush_ready(drv); // Mark the display flush as complete
 }
 
@@ -285,6 +288,7 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     }
 
+    flush_count++;
     lv_disp_flush_ready(drv); // Mark the display flush as complete
 }
 #endif /* EXAMPLE_LVGL_PORT_ROTATION_DEGREE */
@@ -306,6 +310,7 @@ static void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t
     ulTaskNotifyValueClear(NULL, ULONG_MAX);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+    flush_count++;
     lv_disp_flush_ready(drv); // Mark the display flush as complete
 }
 
@@ -344,6 +349,7 @@ void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color
     lvgl_port_rgb_next_buf = color_map; // Update the next RGB buffer
 #endif
 
+    flush_count++;
     lv_disp_flush_ready(drv); // Mark the display flush as complete
 }
 #endif
@@ -361,6 +367,7 @@ void flush_callback(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color
     /* Just copy data from the color map to the RGB frame buffer */
     esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1, offsety2 + 1, color_map);
 
+    flush_count++;
     lv_disp_flush_ready(drv); // Mark the display flush as complete
 }
 
@@ -575,6 +582,11 @@ void lvgl_port_rebind_panel(esp_lcd_panel_handle_t panel_handle)
     void *buf1 = NULL;
     void *buf2 = NULL;
     ESP_ERROR_CHECK(esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 2, &buf1, &buf2));
+    // Fresh PSRAM framebuffers hold random data (reads as a white flash if the
+    // backlight comes on before LVGL's first render) — clear them to black.
+    size_t fb_bytes = (size_t)LVGL_PORT_H_RES * LVGL_PORT_V_RES * sizeof(lv_color_t);
+    memset(buf1, 0, fb_bytes);
+    memset(buf2, 0, fb_bytes);
     drv->draw_buf->buf1 = buf1;
     drv->draw_buf->buf2 = buf2;
     drv->draw_buf->buf_act = buf1;
@@ -600,6 +612,11 @@ void lvgl_port_suspend(void)
         esp_timer_stop(lvgl_tick_timer);
         ESP_LOGI(TAG, "LVGL tick timer stopped");
     }
+}
+
+uint32_t lvgl_port_flush_count(void)
+{
+    return flush_count;
 }
 
 void lvgl_port_resume(void)

@@ -90,6 +90,17 @@ void dashboard_ui_update(const dashboard_model_t *m);
 /** Update only the BLE status icon (separate, low-rate path). */
 void dashboard_ui_set_ble(bool connected);
 
+/** USB link state shown by the header USB icon. */
+typedef enum {
+    DASH_USB_NONE = 0,   /* no host attached — icon hidden            */
+    DASH_USB_IDLE,       /* cable attached, no port open — faint icon */
+    DASH_USB_DEBUG,      /* debug/console COM port open — "DBG"       */
+    DASH_USB_MODEM,      /* CAN modem COM port open — "CAN"           */
+} dash_usb_status_t;
+
+/** Update only the USB status icon (separate, low-rate path). */
+void dashboard_ui_set_usb(dash_usb_status_t status);
+
 #ifdef __cplusplus
 }
 #endif

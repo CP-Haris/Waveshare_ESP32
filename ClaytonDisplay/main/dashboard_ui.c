@@ -131,6 +131,7 @@ static lv_obj_t *g_btn_inv,   *g_lbl_inv;
 static lv_obj_t *g_btn_dcout, *g_lbl_dcout;
 
 static lv_obj_t *g_ble_icon;
+static lv_obj_t *g_usb_icon, *g_usb_lbl;
 static lv_obj_t *g_btn_settings;
 static lv_obj_t *g_btn_error,  *g_lbl_error;
 
@@ -446,6 +447,24 @@ void dashboard_ui_create(lv_obj_t *parent, const dashboard_callbacks_t *cb)
     lv_obj_align(g_ble_icon, LV_ALIGN_TOP_LEFT,
                  L.margin + L.badge_w + 14, L.margin + 10);
 
+    /* USB icon + port-mode tag ("CAN"/"DBG") — right of the BLE icon.
+     * Hidden until a USB host attaches (see dashboard_ui_set_usb). */
+    g_usb_icon = lv_label_create(g_root);
+    lv_label_set_text(g_usb_icon, LV_SYMBOL_USB);
+    lv_obj_set_style_text_color(g_usb_icon, COL_TEXT_FAINT, 0);
+    lv_obj_set_style_text_font(g_usb_icon, &lv_font_montserrat_24, 0);
+    lv_obj_align(g_usb_icon, LV_ALIGN_TOP_LEFT,
+                 L.margin + L.badge_w + 14 + 34, L.margin + 10);
+    lv_obj_add_flag(g_usb_icon, LV_OBJ_FLAG_HIDDEN);
+
+    g_usb_lbl = lv_label_create(g_root);
+    lv_label_set_text(g_usb_lbl, "");
+    lv_obj_set_style_text_color(g_usb_lbl, COL_TEXT_FAINT, 0);
+    lv_obj_set_style_text_font(g_usb_lbl, L.f_card_sm, 0);
+    lv_obj_align(g_usb_lbl, LV_ALIGN_TOP_LEFT,
+                 L.margin + L.badge_w + 14 + 34 + 28, L.margin + 16);
+    lv_obj_add_flag(g_usb_lbl, LV_OBJ_FLAG_HIDDEN);
+
     /* Device selector pill (center) */
     g_dev_sel = lv_obj_create(g_root);
     lv_obj_set_size(g_dev_sel, L.pill_w, L.pill_h);
@@ -528,6 +547,35 @@ void dashboard_ui_set_ble(bool connected)
     if (!g_ble_icon) return;
     lv_obj_set_style_text_color(g_ble_icon,
         connected ? COL_ACCENT : COL_TEXT_FAINT, 0);
+}
+
+void dashboard_ui_set_usb(dash_usb_status_t status)
+{
+    if (!g_usb_icon) return;
+
+    if (status == DASH_USB_NONE) {
+        lv_obj_add_flag(g_usb_icon, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_usb_lbl, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_clear_flag(g_usb_icon, LV_OBJ_FLAG_HIDDEN);
+
+    lv_color_t col;
+    const char *tag;
+    switch (status) {
+    case DASH_USB_MODEM: col = COL_GREEN;      tag = "CAN"; break;
+    case DASH_USB_DEBUG: col = COL_ORANGE;     tag = "DBG"; break;
+    default:             col = COL_TEXT_FAINT; tag = "";    break;
+    }
+    lv_obj_set_style_text_color(g_usb_icon, col, 0);
+
+    if (tag[0]) {
+        set_text_if_changed(g_usb_lbl, tag);
+        lv_obj_set_style_text_color(g_usb_lbl, col, 0);
+        lv_obj_clear_flag(g_usb_lbl, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_usb_lbl, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 /*==========================================================================

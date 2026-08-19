@@ -24,6 +24,7 @@
 #include "can_hmi.h"
 #include "waveshare_rgb_lcd_port.h"
 #include "ble_gateway.h"
+#include "usb_modem.h"
 #include "ui_palette.h"
 #include "ui_screen.h"
 #include "dashboard_ui.h"
@@ -434,9 +435,6 @@ typedef struct {
 } menu_category_t;
 
 #define MAX_INFO_ROWS 10
-typedef struct {
-    int count;
-} cat_info_t;
 
 // --- AC Output (Block 50) ---
 static setting_t settings_ac_out[] = {
@@ -1133,8 +1131,9 @@ static void decode_failure_codes(lps_data_t *d, const uint8_t *data)
 
 static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint8_t len)
 {
+    if (len < 8) return;
     uint16_t upper = (can_id >> 16) & 0xFFFF;
-    if (upper == 0x18FF || upper == 0x14FF || upper == 0x19FF) {
+    if (upper == 0x18FF || upper == 0x14FF) {
         uint8_t pgn = (can_id >> 8) & 0xFF;
         switch (pgn) {
         case 0x00:
@@ -1202,6 +1201,7 @@ static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint
 
 static void decode_broadcast_bms(lps_data_t *d, uint32_t can_id, uint8_t *data, uint8_t len)
 {
+    if (len < 8) return;
     uint16_t upper = (can_id >> 16) & 0xFFFF;
     if (upper == 0x18FF || upper == 0x14FF) {
         uint8_t pgn = (can_id >> 8) & 0xFF;
@@ -1291,6 +1291,10 @@ static void decode_can_message(uint32_t can_id, uint8_t *data, uint8_t len)
         }
         ble_gateway_send_can_frame(can_id, data, len);
     }
+
+    // USB CAN modem mirrors every frame to the virtual COM port when a PC
+    // tool has the port open (usb_modem_send_can_frame no-ops otherwise).
+    usb_modem_send_can_frame(can_id, data, len);
 
     uint8_t src_addr = can_id & 0xFF;
     uint16_t upper = (can_id >> 16) & 0xFFFF;
@@ -1642,6 +1646,7 @@ static void editor_btn_cb(lv_event_t *e)
     lv_obj_t *btn = lv_event_get_target(e);
     const char *txt = lv_label_get_text(lv_obj_get_child(btn, 0));
     buzzer_click();
+    if (!editor_setting) return;
 
     if (strcmp(txt, LV_SYMBOL_CLOSE) == 0) {
         can_get_value(editor_setting->block, editor_setting->id);
@@ -1655,7 +1660,6 @@ static void editor_btn_cb(lv_event_t *e)
         editor_setting = NULL;
         return;
     }
-    if (!editor_setting) return;
 
     if (strcmp(txt, LV_SYMBOL_PLUS) == 0) {
         int32_t nv = editor_setting->current_val + editor_setting->step_slow;
@@ -2632,6 +2636,10 @@ enum {
     PWR_RESLEEP_SPLASH, // Showing splash 2s before re-sleeping
 };
 
+// Wake/sleep breadcrumb in RTC memory — survives every reset except
+// power-on. After a crash-reboot, main.c logs where the sequence died.
+RTC_NOINIT_ATTR uint32_t g_pwr_wake_step;
+
 static int  pwr_state = PWR_ACTIVE;
 static uint32_t pwr_state_start_ms  = 0;
 static uint32_t pwr_last_touch_ms   = 0;
@@ -2742,10 +2750,8 @@ static bool touch_is_pressed(void)
     return (inactive < 1000);
 }
 
-// Direct touch poll for sleep mode — GT911 stays running (not slept).
-// Simpler and more reliable: just read the touch register.
-// Direct touch poll for sleep mode — GT911 stays running.
-// Caller is responsible for CPU frequency; no switching here.
+// Direct touch poll for sleep mode — GT911 stays running (not slept), so the
+// touch register can simply be read. Caller is responsible for CPU frequency.
 static bool touch_is_pressed_direct(void)
 {
     static uint32_t poll_count = 0;
@@ -2803,6 +2809,7 @@ static void pwr_remove_splash(void)
 
 static void pwr_display_off(void)
 {
+    g_pwr_wake_step = 0x21;
     // 1) Turn off backlight
     esp_err_t ret;
     for (int i = 0; i < 3; i++) {
@@ -2853,6 +2860,13 @@ static void pwr_display_off(void)
     // 10) Slow BLE advertising — cuts radio duty ~8x while still discoverable
     ble_gateway_set_standby(true);
 
+    // 10b) Tear down the USB stack. An OTG session does not survive light
+    //      sleep — it leaves Windows with a dead COM port — so detach
+    //      cleanly; the port re-enumerates on wake.
+    g_pwr_wake_step = 0x22;
+    usb_modem_standby(true);
+    g_pwr_wake_step = 0x23;
+
     // 11) Enable DFS + automatic light sleep. The chip now sleeps between
     //     FreeRTOS ticks (tickless idle); the BLE controller wakes itself for
     //     each advertising/connection event (BT modem sleep, main-XTAL lpclk),
@@ -2875,10 +2889,12 @@ static void pwr_display_off(void)
 
     last_can_window_ms = now_ms();
     pwr_state = PWR_SLEEPING;
+    g_pwr_wake_step = 0x2F;   // sleep entry completed
 }
 
 static void pwr_display_on(void)
 {
+    g_pwr_wake_step = 1;
     // 1) Restore CPU clock to 240MHz, disable light sleep
     esp_pm_config_t pm_cfg = {
         .max_freq_mhz = 240,
@@ -2888,12 +2904,17 @@ static void pwr_display_on(void)
     esp_err_t ret = esp_pm_configure(&pm_cfg);
     ESP_LOGI(TAG, "[PWR] CPU 240MHz (ret=%s)", esp_err_to_name(ret));
 
-    // 2) Restore fast BLE advertising + bring the CAN bus back up
+    // 2) Restore fast BLE advertising + USB + bring the CAN bus back up
+    g_pwr_wake_step = 2;
     ble_gateway_set_standby(false);
+    g_pwr_wake_step = 3;
+    usb_modem_standby(false);
+    g_pwr_wake_step = 4;
     can_wake_source_enable(false);
     can_hmi_bus_start();
 
     // 3) Wake CH422G + release LCD_RST + CTP_RST (DISP stays LOW)
+    g_pwr_wake_step = 5;
     waveshare_ch422g_wake();
     waveshare_lcd_reset_release();   // Sets IO1+IO3+IO4 HIGH, IO2(DISP) LOW
     ESP_LOGI(TAG, "[PWR] CH422G awake, LCD_RST released");
@@ -2902,12 +2923,28 @@ static void pwr_display_on(void)
 
     // 5) Recreate the RGB panel (deleted in standby) and rebind LVGL to the
     //    new framebuffers — forces a full redraw of the current screen
+    g_pwr_wake_step = 6;
     waveshare_lcd_panel_wake();
 
     // 6) Resume LVGL task — restarts rendering + touch polling
+    g_pwr_wake_step = 7;
     lvgl_port_resume();
 
+    // 6b) Hold the backlight off until LVGL has flushed a frame into the
+    //     recreated framebuffers — lighting up earlier shows a white flash.
+    //     The caller holds the LVGL mutex (which blocks all rendering), so
+    //     release it while waiting; the splash was created before this call,
+    //     so the first frame rendered is the splash. Max 500 ms.
+    g_pwr_wake_step = 8;
+    uint32_t fc = lvgl_port_flush_count();
+    lvgl_port_unlock();
+    for (int i = 0; i < 50 && lvgl_port_flush_count() == fc; i++) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    lvgl_port_lock(-1);
+
     // 7) Turn on backlight (DISP=HIGH → ST7262 power-on sequence)
+    g_pwr_wake_step = 9;
     for (int i = 0; i < 3; i++) {
         ret = wavesahre_rgb_lcd_bl_on();
         if (ret == ESP_OK) break;
@@ -2915,6 +2952,7 @@ static void pwr_display_on(void)
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     ESP_LOGI(TAG, "[PWR] Display on (ret=%s)", esp_err_to_name(ret));
+    g_pwr_wake_step = 10;   // wake completed
 }
 
 // Returns true when display is off or showing splash (skip normal UI updates)
@@ -2925,7 +2963,7 @@ static bool pwr_management_tick(void)
     // Startup grace period — don't do idle detection for first 15s
     if (pwr_boot_time_ms == 0) {
         pwr_boot_time_ms = now;
-        if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+        if (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_EXT0)) {
             pwr_skip_grace = true;
             ESP_LOGI(TAG, "[PWR] Deep sleep wake — skipping grace period");
         }
@@ -2934,9 +2972,12 @@ static bool pwr_management_tick(void)
         (now - pwr_boot_time_ms) < PWR_STARTUP_GRACE_MS)
         return false;
 
-    // Keep the gateway awake while BLE raw CAN passthrough is active.
-    // This avoids stop/start TWAI gaps that can drop bootloader traffic.
-    if (ble_can_passthrough_enabled && ble_gateway_is_connected()) {
+    // Keep the gateway awake while BLE raw CAN passthrough is active or a
+    // USB host is attached (virtual COM port must stay responsive — light
+    // sleep would break USB enumeration). Avoids stop/start TWAI gaps that
+    // can drop bootloader traffic.
+    if ((ble_can_passthrough_enabled && ble_gateway_is_connected()) ||
+        usb_modem_host_present()) {
         pwr_last_touch_ms = now;
         pwr_was_idle = false;
 
@@ -3000,9 +3041,11 @@ static bool pwr_management_tick(void)
         bool touch = touch_is_pressed_direct();
         if (sys_active || touch) {
             ESP_LOGI(TAG, "[PWR] Wake (sys_active=%d, touch=%d)", sys_active, touch);
-            pwr_display_on();
+            // Splash BEFORE display-on: pwr_display_on holds the backlight
+            // until the first frame is rendered — which must be the splash.
             pwr_remove_splash();
             pwr_show_splash();
+            pwr_display_on();
             pwr_state_start_ms = now;
             pwr_state = PWR_WAKE_SPLASH;
             return true;
@@ -3064,6 +3107,17 @@ static bool pwr_management_tick(void)
         return true;
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+//  USB CAN modem — frames from the PC tool (called from the TinyUSB task)
+// ---------------------------------------------------------------------------
+static void usb_modem_can_tx_handler(uint32_t can_id, const uint8_t *data, uint8_t dlc)
+{
+    if (should_log_boot_can_frame(can_id)) {
+        log_boot_diag_frame("USB->CAN", can_id, data, dlc);
+    }
+    can_send_raw(can_id, data, dlc);
 }
 
 // ---------------------------------------------------------------------------
@@ -3161,6 +3215,9 @@ void can_hmi_init(void)
     ble_gateway_set_cmd_callback(ble_cmd_handler);
     create_ble_pin_popup(scr, ble_pin);
 
+    // --- USB CAN modem: route PC frames onto the bus ---
+    usb_modem_set_can_tx_callback(usb_modem_can_tx_handler);
+
     ESP_LOGI(TAG, "CAN HMI UI initialized (%dx%d), BLE PIN=%06lu",
              SCREEN_W, SCREEN_H, (unsigned long)ble_pin);
 }
@@ -3171,24 +3228,46 @@ void can_hmi_task(void *arg)
     ESP_LOGI(TAG, "CAN HMI task started");
     light_sleep_stats_init();
 
+    // Capture crash diagnostics from the PREVIOUS boot. Repeated in every
+    // heartbeat because the USB log buffer is cleared when a host attaches —
+    // one-shot boot logs never reach the PC.
+    int boot_rst = (int)esp_reset_reason();
+    uint32_t boot_ws = g_pwr_wake_step;
+    g_pwr_wake_step = 0;
+
     uint32_t last_ui_update = 0;
     uint32_t last_busoff_check = 0;
     uint32_t last_heartbeat = 0;
     uint32_t last_ble_status_update = 0;
+    dash_usb_status_t last_usb_status = DASH_USB_NONE;
+
+    bool usb_link_prev = false;
 
     while (1) {
-        bool raw_passthrough_active = ble_can_passthrough_enabled && ble_gateway_is_connected();
+        bool usb_link = usb_modem_active();
+        bool raw_passthrough_active =
+            (ble_can_passthrough_enabled && ble_gateway_is_connected()) || usb_link;
+
+        // PC tool opened the modem COM port — wake the gateway (mirrors the
+        // BLE passthrough wake in ble_cmd_handler).
+        if (usb_link && !usb_link_prev) {
+            pwr_last_touch_ms = now_ms();
+            pwr_was_idle = false;
+            pwr_force_wake_request = true;
+        }
+        usb_link_prev = usb_link;
 
         if (pwr_force_wake_request) {
-            if (pwr_state == PWR_SLEEPING) {
+            if (pwr_state == PWR_SLEEPING && lvgl_port_lock(-1)) {
                 uint32_t now = now_ms();
                 ESP_LOGI(TAG, "[PWR] Forcing wake for BLE CAN passthrough");
-                pwr_display_on();
                 pwr_remove_splash();
                 pwr_show_splash();
+                pwr_display_on();
                 pwr_state_start_ms = now;
                 pwr_state = PWR_WAKE_SPLASH;
                 pwr_last_touch_ms = now;
+                lvgl_port_unlock();
             }
             pwr_force_wake_request = false;
         }
@@ -3207,9 +3286,9 @@ void can_hmi_task(void *arg)
         // safety net in case the wake was missed.
         // =============================================================
         if (pwr_state == PWR_SLEEPING) {
-            bool ble_active = ble_gateway_is_connected();
+            bool link_active = ble_gateway_is_connected() || usb_modem_host_present();
 
-            if (ble_active) {
+            if (link_active) {
                 can_wake_source_enable(false);
                 can_hmi_bus_start();
                 vTaskDelay(pdMS_TO_TICKS(50));
@@ -3284,9 +3363,9 @@ void can_hmi_task(void *arg)
                 int64_t up_us = esp_timer_get_time();
                 int64_t ls_us = ls_total_us;
                 ESP_LOGI(TAG,
-                         "[HB] alive t=%lu pwr=%d ble=%d twai=%d | 10s: loops=%lu canwake=%lu win=%lu"
+                         "[HB] alive t=%lu pwr=%d link=%d twai=%d | 10s: loops=%lu canwake=%lu win=%lu"
                          " | lightsleep: n=%lu total=%llds = %lu%% of uptime",
-                         (unsigned long)now_hb, pwr_state, ble_active,
+                         (unsigned long)now_hb, pwr_state, link_active,
                          twai_installed, (unsigned long)sleep_loops,
                          (unsigned long)can_wake_count,
                          (unsigned long)can_window_count,
@@ -3300,8 +3379,8 @@ void can_hmi_task(void *arg)
             if (pwr_state == PWR_SLEEPING) {
                 // With no PM lock held this delay is where the chip actually
                 // light-sleeps. It also sets the touch response latency.
-                vTaskDelay(pdMS_TO_TICKS(ble_active ? 50
-                                                    : PWR_SLEEP_POLL_MS));
+                vTaskDelay(pdMS_TO_TICKS(link_active ? 50
+                                                     : PWR_SLEEP_POLL_MS));
             }
             continue;
         }
@@ -3317,10 +3396,12 @@ void can_hmi_task(void *arg)
             }
         }
 
-        // Heartbeat every 10s to prove task is alive
+        // Heartbeat every 10s to prove task is alive. rst/ws = reset reason
+        // and wake-step breadcrumb from the PREVIOUS boot (crash diagnosis).
         uint32_t now_bo = now_ms();
         if (now_bo - last_heartbeat >= 10000) {
-            ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d", (unsigned long)now_bo, pwr_state);
+            ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d rst=%d ws=0x%lX",
+                     (unsigned long)now_bo, pwr_state, boot_rst, (unsigned long)boot_ws);
             last_heartbeat = now_bo;
         }
 
@@ -3411,18 +3492,29 @@ void can_hmi_task(void *arg)
             last_ui_update = now;
         }
 
-        // ---- BLE status update ~1 Hz ----
+        // ---- Status icons: USB applied on every CHANGE (checked each loop
+        //      iteration — the live tud state reads are cheap), BLE at 1 Hz.
+        //      A failed lock retries next iteration instead of next second.
         uint32_t now_ble = now_ms();
-        if (now_ble - last_ble_status_update >= 1000) {
-            if (lvgl_port_lock(5)) {
+        dash_usb_status_t ust;
+        if (usb_modem_active())            ust = DASH_USB_MODEM;
+        else if (usb_modem_console_open()) ust = DASH_USB_DEBUG;
+        else if (usb_modem_host_present()) ust = DASH_USB_IDLE;
+        else                               ust = DASH_USB_NONE;
+
+        bool ble_due = (now_ble - last_ble_status_update >= 1000);
+        if ((ust != last_usb_status || ble_due) && lvgl_port_lock(5)) {
+            dashboard_ui_set_usb(ust);
+            last_usb_status = ust;
+            if (ble_due) {
                 bool ble_conn = ble_gateway_is_connected();
                 dashboard_ui_set_ble(ble_conn);
                 if (ble_conn && ble_pin_popup) {
                     lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
                 }
-                lvgl_port_unlock();
+                last_ble_status_update = now_ble;
             }
-            last_ble_status_update = now_ble;
+            lvgl_port_unlock();
         }
 
         // Slow down loop in sleep mode — CAN + touch only

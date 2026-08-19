@@ -22,7 +22,7 @@
 
 /* ===== THE switch: 1 = 5" 1024x600, 0 = 5" 800x480 ===== */
 #ifndef UI_PANEL_1024_600
-#define UI_PANEL_1024_600   (1)
+#define UI_PANEL_1024_600   (0)
 #endif
 
 #if UI_PANEL_1024_600

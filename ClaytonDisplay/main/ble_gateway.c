@@ -99,8 +99,7 @@ static int gatt_rx_access(uint16_t conn, uint16_t attr,
         return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     }
 
-    uint16_t copy_len = len;
-    os_mbuf_copydata(ctxt->om, 0, copy_len, buf);
+    os_mbuf_copydata(ctxt->om, 0, len, buf);
 
     uint8_t cmd = buf[0];
     if (cmd != BLE_CMD_SEND_CAN_FRAME && cmd != BLE_CMD_SEND_CAN_FRAMES) {
@@ -108,7 +107,7 @@ static int gatt_rx_access(uint16_t conn, uint16_t attr,
     }
 
     if (cmd_callback) {
-        cmd_callback(cmd, buf + 1, copy_len - 1);
+        cmd_callback(cmd, buf + 1, len - 1);
     }
 
     return 0;

@@ -53,28 +53,8 @@ static esp_err_t i2c_write_byte(uint8_t dev_addr, uint8_t data)
     return ret;
 }
 
-/**
- * @brief Write a register on a device using [reg_addr, data] I2C frame.
- *        Used for ST7262 (I2C addr 0x3C) which expects [command_addr][param].
- */
-static esp_err_t i2c_write_reg(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
-{
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address  = dev_addr,
-        .scl_speed_hz    = I2C_MASTER_FREQ_HZ,
-    };
-    i2c_master_dev_handle_t dev;
-    esp_err_t ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg, &dev);
-    if (ret != ESP_OK) return ret;
-    uint8_t buf[2] = { reg_addr, data };
-    ret = i2c_master_transmit(dev, buf, 2, I2C_MASTER_TIMEOUT_MS);
-    i2c_master_bus_rm_device(dev);
-    return ret;
-}
-
 // GPIO initialization
-void gpio_init(void)
+static void gpio_init(void)
 {
     // Zero-initialize the config structure
     gpio_config_t io_conf = {};
@@ -89,7 +69,7 @@ void gpio_init(void)
 }
 
 // Reset the touch screen
-void waveshare_esp32_s3_touch_reset()
+static void waveshare_esp32_s3_touch_reset(void)
 {
     i2c_write_byte(0x24, 0x01);
 
@@ -368,50 +348,6 @@ void waveshare_lcd_pins_float(void)
     ESP_LOGI(TAG, "LCD pins driven LOW -- no shoot-through");
 }
 
-/******************************* GT911 sleep / wake ********************************/
-
-/* Helper: send one I2C command to GT911 (address 0x5D) */
-static esp_err_t gt911_write_reg(uint8_t reg_h, uint8_t reg_l, uint8_t val)
-{
-    if (!i2c_bus) return ESP_ERR_INVALID_STATE;
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address  = 0x5D,
-        .scl_speed_hz    = I2C_MASTER_FREQ_HZ,
-    };
-    i2c_master_dev_handle_t dev;
-    esp_err_t ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg, &dev);
-    if (ret != ESP_OK) return ret;
-    uint8_t cmd[3] = { reg_h, reg_l, val };
-    ret = i2c_master_transmit(dev, cmd, 3, I2C_MASTER_TIMEOUT_MS);
-    i2c_master_bus_rm_device(dev);
-    return ret;
-}
-
-esp_err_t waveshare_gt911_sleep(void)
-{
-    // GT911 sleep entry: hold INT LOW, then write 0x05 to 0x8040
-    gpio_set_direction(GPIO_INPUT_IO_4, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_INPUT_IO_4, 0);   // INT LOW
-    esp_rom_delay_us(200);                 // hold >100µs
-    esp_err_t ret = gt911_write_reg(0x80, 0x40, 0x05);
-    // Leave GPIO4 LOW — GT911 is in sleep, no conflict
-    return ret;
-}
-
-esp_err_t waveshare_gt911_wake(void)
-{
-    // GT911 wake: pulse INT HIGH via ESP32 GPIO4 (the actual INT pin)
-    // Match Espressif BSP: OUTPUT HIGH → wait → OUTPUT_OD (release)
-    gpio_set_direction(GPIO_INPUT_IO_4, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_INPUT_IO_4, 1);   // INT HIGH — wakes GT911
-    vTaskDelay(pdMS_TO_TICKS(5));          // hold 5ms
-    // Release INT pin (open-drain = GT911 can drive it again)
-    gpio_set_direction(GPIO_INPUT_IO_4, GPIO_MODE_OUTPUT_OD);
-    vTaskDelay(pdMS_TO_TICKS(55));         // GT911 needs ~50ms to initialize
-    return ESP_OK;
-}
-
 /******************************* CH422G all IOs LOW ********************************/
 esp_err_t waveshare_ch422g_all_low(void)
 {
@@ -424,14 +360,7 @@ esp_err_t waveshare_ch422g_all_low(void)
     return ESP_OK;
 }
 
-/******************************* CH422G sleep / wake ********************************/
-esp_err_t waveshare_ch422g_sleep(void)
-{
-    // CH422G mode register: IO_OE (0x01) | SLEEP (0x08) = 0x09
-    // Outputs maintain their state. Wakes on any I2C command to CH422G.
-    return i2c_write_byte(0x24, 0x09);
-}
-
+/******************************* CH422G wake ***************************************/
 esp_err_t waveshare_ch422g_wake(void)
 {
     // Any I2C write to CH422G wakes it; SLEEP bit auto-clears.
@@ -478,66 +407,4 @@ bool waveshare_touch_is_pressed(void)
     i2c_master_bus_rm_device(dev);
 
     return (ret == ESP_OK) && ((val & 0x0F) > 0);
-}
-
-/******************************* Example code **************************************/
-static void draw_event_cb(lv_event_t *e) // Draw event callback function
-{
-    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e); // Get the draw part descriptor
-    if (dsc->part == LV_PART_ITEMS)
-    {                                                                 // If drawing chart items
-        lv_obj_t *obj = lv_event_get_target(e);                       // Get the target object of the event
-        lv_chart_series_t *ser = lv_chart_get_series_next(obj, NULL); // Get the series of the chart
-        uint32_t cnt = lv_chart_get_point_count(obj);                 // Get the number of points in the chart
-        /* Make older values more transparent */
-        dsc->rect_dsc->bg_opa = (LV_OPA_COVER * dsc->id) / (cnt - 1); // Set opacity based on the index
-
-        /* Make smaller values blue, higher values red  */
-        lv_coord_t *x_array = lv_chart_get_x_array(obj, ser); // Get the X-axis array
-        lv_coord_t *y_array = lv_chart_get_y_array(obj, ser); // Get the Y-axis array
-        /* dsc->id is the drawing order, but we need the index of the point being drawn dsc->id  */
-        uint32_t start_point = lv_chart_get_x_start_point(obj, ser); // Get the start point of the chart
-        uint32_t p_act = (start_point + dsc->id) % cnt;              // Calculate the actual index based on the start point
-        lv_opa_t x_opa = (x_array[p_act] * LV_OPA_50) / 200;         // Calculate X-axis opacity
-        lv_opa_t y_opa = (y_array[p_act] * LV_OPA_50) / 1000;        // Calculate Y-axis opacity
-
-        dsc->rect_dsc->bg_color = lv_color_mix(lv_palette_main(LV_PALETTE_RED), // Mix colors
-                                               lv_palette_main(LV_PALETTE_BLUE),
-                                               x_opa + y_opa);
-    }
-}
-
-static void add_data(lv_timer_t *timer) // Timer callback to add data to the chart
-{
-    lv_obj_t *chart = timer->user_data;                                                                        // Get the chart associated with the timer
-    lv_chart_set_next_value2(chart, lv_chart_get_series_next(chart, NULL), lv_rand(0, 200), lv_rand(0, 1000)); // Add random data to the chart
-}
-
-// This demo UI is adapted from LVGL official example: https://docs.lvgl.io/master/examples.html#scatter-chart
-void example_lvgl_demo_ui() // LVGL demo UI initialization function
-{
-    lv_obj_t *scr = lv_scr_act();                                              // Get the current active screen
-    lv_obj_t *chart = lv_chart_create(scr);                                    // Create a chart object
-    lv_obj_set_size(chart, 200, 150);                                          // Set chart size
-    lv_obj_align(chart, LV_ALIGN_CENTER, 0, 0);                                // Center the chart on the screen
-    lv_obj_add_event_cb(chart, draw_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL); // Add draw event callback
-    lv_obj_set_style_line_width(chart, 0, LV_PART_ITEMS);                      /* Remove chart lines  */
-
-    lv_chart_set_type(chart, LV_CHART_TYPE_SCATTER); // Set chart type to scatter
-
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_X, 5, 5, 5, 1, true, 30);  // Set X-axis ticks
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, 6, 5, true, 50); // Set Y-axis ticks
-
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_X, 0, 200);  // Set X-axis range
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 1000); // Set Y-axis range
-
-    lv_chart_set_point_count(chart, 50); // Set the number of points in the chart
-
-    lv_chart_series_t *ser = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y); // Add a series to the chart
-    for (int i = 0; i < 50; i++)
-    {                                                                            // Add random points to the chart
-        lv_chart_set_next_value2(chart, ser, lv_rand(0, 200), lv_rand(0, 1000)); // Set X and Y values
-    }
-
-    lv_timer_create(add_data, 100, chart); // Create a timer to add new data every 100ms
 }

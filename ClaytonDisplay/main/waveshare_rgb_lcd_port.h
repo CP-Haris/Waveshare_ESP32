@@ -10,7 +10,6 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch_gt911.h"
-#include "lv_demos.h"
 #include "lvgl_port.h"
 
 
@@ -115,9 +114,6 @@
  * enabled into an idle bus, so the cheapest state is to leave IO44 alone.
  * ------------------------------------------------------------------------- */
 
-bool example_lvgl_lock(int timeout_ms);
-void example_lvgl_unlock(void);
-
 esp_err_t waveshare_esp32_s3_rgb_lcd_init();
 
 esp_err_t wavesahre_rgb_lcd_bl_on();
@@ -146,12 +142,7 @@ esp_err_t waveshare_lcd_panel_wake(void);
 void waveshare_lcd_pins_float(void);
 esp_err_t waveshare_lcd_reset_assert(void);
 esp_err_t waveshare_lcd_reset_release(void);
-esp_err_t waveshare_gt911_sleep(void);
-esp_err_t waveshare_gt911_wake(void);
 esp_err_t waveshare_ch422g_all_low(void);
-esp_err_t waveshare_ch422g_sleep(void);
 esp_err_t waveshare_ch422g_wake(void);
-
-void example_lvgl_demo_ui();
 
 #endif

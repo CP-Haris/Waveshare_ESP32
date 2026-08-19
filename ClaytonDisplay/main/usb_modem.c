@@ -10,7 +10,9 @@
 
 #include "usb_modem.h"
 
+#include <stdio.h>
 #include <string.h>
+#include "rtc_pcf85063.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -364,27 +366,52 @@ static void console_line_state_cb(int itf, cdcacm_event_t *event)
     }
 }
 
-// 'BT' on the DEBUG port arms a reboot into ROM download mode (fires when
-// the port closes, or after 3 s if the host keeps it open). It lives on the
-// console port — not the modem port — so it can never collide with the CAN
-// tool's protocol traffic. Used by flash.ps1.
+// Debug-port text commands (CR/LF-terminated lines). They live on the
+// console port — not the modem port — so they can never collide with the
+// CAN tool's protocol traffic:
+//   BT                  arm a reboot into ROM download mode; fires when the
+//                       port closes (3 s fallback). Used by flash.ps1.
+//   TS YYYYMMDDHHMMSS   set the RTC + system clock (space optional).
+static void console_handle_line(const char *line, size_t len)
+{
+    if (len >= 2 && line[0] == 'B' && line[1] == 'T') {
+        ESP_LOGW(TAG, "BT command armed — download mode on port close");
+        s_boot_armed = true;
+        schedule_download_reboot(3000);
+        return;
+    }
+    if (len >= 2 && line[0] == 'T' && line[1] == 'S') {
+        const char *p = line + 2;
+        while (*p == ' ') p++;
+        int y, mo, d, h, mi, s;
+        if (sscanf(p, "%4d%2d%2d%2d%2d%2d", &y, &mo, &d, &h, &mi, &s) == 6 &&
+            rtc_pcf85063_set_datetime(y, mo, d, h, mi, s) == ESP_OK) {
+            ESP_LOGI(TAG, "TS ok");
+        } else {
+            ESP_LOGW(TAG, "TS failed — expected TS YYYYMMDDHHMMSS");
+        }
+        return;
+    }
+}
+
 static void console_rx_cb(int itf, cdcacm_event_t *event)
 {
     (void)event;
-    static uint8_t bt_state = 0;
+    static char line[32];
+    static size_t line_len = 0;
     uint8_t buf[64];
     size_t rx_size = 0;
     while (tinyusb_cdcacm_read(itf, buf, sizeof(buf), &rx_size) == ESP_OK && rx_size > 0) {
         for (size_t i = 0; i < rx_size; i++) {
-            if (buf[i] == 'B') {
-                bt_state = 1;
-            } else if (bt_state == 1 && buf[i] == 'T') {
-                bt_state = 0;
-                ESP_LOGW(TAG, "BT command armed — download mode on port close");
-                s_boot_armed = true;
-                schedule_download_reboot(3000);
-            } else {
-                bt_state = 0;
+            char c = (char)buf[i];
+            if (c == '\r' || c == '\n') {
+                if (line_len > 0) {
+                    line[line_len] = '\0';
+                    console_handle_line(line, line_len);
+                }
+                line_len = 0;
+            } else if (line_len < sizeof(line) - 1) {
+                line[line_len++] = c;
             }
         }
         rx_size = 0;

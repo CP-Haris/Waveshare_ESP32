@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "waveshare_rgb_lcd_port.c" "main.c" "lvgl_port.c" "can_hmi.c" "ble_gateway.c" "dashboard_ui.c" "usb_modem.c"
+    SRCS "waveshare_rgb_lcd_port.c" "main.c" "lvgl_port.c" "can_hmi.c" "ble_gateway.c" "dashboard_ui.c" "usb_modem.c" "rtc_pcf85063.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES bt nvs_flash)
 

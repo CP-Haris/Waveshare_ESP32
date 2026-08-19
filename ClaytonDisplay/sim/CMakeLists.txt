@@ -27,6 +27,7 @@ set(SIM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/main.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/sdl_driver.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/ui_demo.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui_doc.c"
     "${REPO_MAIN}/dashboard_ui.c"      # the REAL dashboard, shared with firmware
 )
 

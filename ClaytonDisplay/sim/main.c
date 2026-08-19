@@ -12,16 +12,24 @@
  *     ./clayton_sim          # follow ui_screen.h (firmware setting)
  *     ./clayton_sim 800      # force 800x480  (5" panel)
  *     ./clayton_sim 1024     # force 1024x600 (7" panel)
+ *
+ * A second argument selects a static documentation screen instead of the
+ * animated demo (see ui_doc.c for the list):
+ *
+ *     ./clayton_sim 1024 settings
+ *     ./clayton_sim 1024 popup-error
  */
 
 #include <SDL2/SDL.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include "lvgl.h"
 #include "sdl_driver.h"
 #include "ui_screen.h"
 
-void ui_demo_create(void);   /* from ui_demo.c */
+void ui_demo_create(void);              /* from ui_demo.c */
+bool ui_doc_create(const char *screen); /* from ui_doc.c  */
 
 int main(int argc, char *argv[])
 {
@@ -47,7 +55,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ui_demo_create();
+    if (argc > 2) {
+        if (!ui_doc_create(argv[2])) {
+            SDL_Log("Unknown doc screen '%s' (see ui_doc.c)", argv[2]);
+            return 1;
+        }
+    } else {
+        ui_demo_create();
+    }
 
     /* Main loop: pump input, run LVGL timers. */
     while (sdl_sim_pump()) {

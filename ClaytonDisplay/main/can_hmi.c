@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,6 +26,7 @@
 #include "waveshare_rgb_lcd_port.h"
 #include "ble_gateway.h"
 #include "usb_modem.h"
+#include "rtc_pcf85063.h"
 #include "ui_palette.h"
 #include "ui_screen.h"
 #include "dashboard_ui.h"
@@ -432,6 +434,7 @@ typedef struct {
     setting_t *settings;
     int count;
     uint8_t info_type;
+    bool has_clock;      /* append the local "Set Clock" (RTC) row */
 } menu_category_t;
 
 #define MAX_INFO_ROWS 10
@@ -487,15 +490,15 @@ static setting_t settings_general[] = {
 #define SETTINGS_COUNT(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
 
 static menu_category_t menu_categories_lps[] = {
-    {"AC Output",       LV_SYMBOL_POWER,    settings_ac_out,  SETTINGS_COUNT(settings_ac_out),  INFO_AC_OUT},
-    {"AC Input",        LV_SYMBOL_CHARGE,   settings_ac_in,   SETTINGS_COUNT(settings_ac_in),   INFO_AC_IN},
-    {"DC Output",       LV_SYMBOL_DOWNLOAD, settings_dc_out,  SETTINGS_COUNT(settings_dc_out),  INFO_DC_OUT},
-    {"DC Input",        LV_SYMBOL_UPLOAD,   settings_dc_in,   SETTINGS_COUNT(settings_dc_in),   INFO_DC_IN},
-    {"Starter Battery", LV_SYMBOL_BATTERY_3,settings_starter, SETTINGS_COUNT(settings_starter), INFO_STARTER},
-    {"Solar",           LV_SYMBOL_IMAGE,    settings_solar,   SETTINGS_COUNT(settings_solar),   INFO_SOLAR},
-    {"General",         LV_SYMBOL_SETTINGS, settings_general, SETTINGS_COUNT(settings_general), INFO_NONE},
-    {"Status",          LV_SYMBOL_EYE_OPEN, NULL,             0, INFO_LPS_STATUS},
-    {"Temperature",     LV_SYMBOL_WARNING,  NULL,             0, INFO_LPS_TEMP},
+    {"AC Output",       LV_SYMBOL_POWER,    settings_ac_out,  SETTINGS_COUNT(settings_ac_out),  INFO_AC_OUT,  false},
+    {"AC Input",        LV_SYMBOL_CHARGE,   settings_ac_in,   SETTINGS_COUNT(settings_ac_in),   INFO_AC_IN,   false},
+    {"DC Output",       LV_SYMBOL_DOWNLOAD, settings_dc_out,  SETTINGS_COUNT(settings_dc_out),  INFO_DC_OUT,  false},
+    {"DC Input",        LV_SYMBOL_UPLOAD,   settings_dc_in,   SETTINGS_COUNT(settings_dc_in),   INFO_DC_IN,   false},
+    {"Starter Battery", LV_SYMBOL_BATTERY_3,settings_starter, SETTINGS_COUNT(settings_starter), INFO_STARTER, false},
+    {"Solar",           LV_SYMBOL_IMAGE,    settings_solar,   SETTINGS_COUNT(settings_solar),   INFO_SOLAR,   false},
+    {"General",         LV_SYMBOL_SETTINGS, settings_general, SETTINGS_COUNT(settings_general), INFO_NONE,    true},
+    {"Status",          LV_SYMBOL_EYE_OPEN, NULL,             0, INFO_LPS_STATUS, false},
+    {"Temperature",     LV_SYMBOL_WARNING,  NULL,             0, INFO_LPS_TEMP,   false},
 };
 #define NUM_CATEGORIES_LPS (sizeof(menu_categories_lps) / sizeof(menu_categories_lps[0]))
 
@@ -506,9 +509,9 @@ static setting_t settings_bms_battery[] = {
 };
 
 static menu_category_t menu_categories_bms[] = {
-    {"Battery",         LV_SYMBOL_BATTERY_FULL, settings_bms_battery, SETTINGS_COUNT(settings_bms_battery), INFO_NONE},
-    {"Status",          LV_SYMBOL_EYE_OPEN,     NULL,                 0, INFO_BMS_STATUS},
-    {"Temperature",     LV_SYMBOL_WARNING,      NULL,                 0, INFO_BMS_TEMP},
+    {"Battery",         LV_SYMBOL_BATTERY_FULL, settings_bms_battery, SETTINGS_COUNT(settings_bms_battery), INFO_NONE, false},
+    {"Status",          LV_SYMBOL_EYE_OPEN,     NULL,                 0, INFO_BMS_STATUS, false},
+    {"Temperature",     LV_SYMBOL_WARNING,      NULL,                 0, INFO_BMS_TEMP,   false},
 };
 #define NUM_CATEGORIES_BMS (sizeof(menu_categories_bms) / sizeof(menu_categories_bms[0]))
 
@@ -1403,6 +1406,13 @@ static lv_obj_t *editor_lbl_name;
 static lv_obj_t *editor_lbl_value;
 static lv_obj_t *editor_lbl_range;
 
+// Clock (RTC) editor popup — rollers: year, month, day, hour, minute
+static lv_obj_t *clock_overlay;
+static lv_obj_t *clock_rollers[5];
+static lv_obj_t *clock_row_val;      // value label on the "Set Clock" row
+#define CLOCK_YEAR_MIN 2024
+#define CLOCK_YEAR_MAX 2040
+
 // ---------------------------------------------------------------------------
 //  Helper Functions
 // ---------------------------------------------------------------------------
@@ -1751,6 +1761,156 @@ static void open_editor(setting_t *s)
 }
 
 // ---------------------------------------------------------------------------
+//  Clock (RTC) editor popup — five rollers + OK/Cancel
+// ---------------------------------------------------------------------------
+static void clock_ok_cb(lv_event_t *e)
+{
+    (void)e; buzzer_click();
+    int y  = CLOCK_YEAR_MIN + (int)lv_roller_get_selected(clock_rollers[0]);
+    int mo = 1 + (int)lv_roller_get_selected(clock_rollers[1]);
+    int d  = 1 + (int)lv_roller_get_selected(clock_rollers[2]);
+    int h  = (int)lv_roller_get_selected(clock_rollers[3]);
+    int mi = (int)lv_roller_get_selected(clock_rollers[4]);
+    rtc_pcf85063_set_datetime(y, mo, d, h, mi, 0);
+    lv_obj_add_flag(clock_overlay, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void clock_cancel_cb(lv_event_t *e)
+{
+    (void)e; buzzer_click();
+    lv_obj_add_flag(clock_overlay, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void open_clock_editor(lv_event_t *e)
+{
+    (void)e; buzzer_click();
+    time_t t = time(NULL);
+    struct tm lt;
+    localtime_r(&t, &lt);
+    int y = lt.tm_year + 1900;
+    if (y < CLOCK_YEAR_MIN || y > CLOCK_YEAR_MAX) {
+        // RTC never set — start from something sensible
+        y = CLOCK_YEAR_MIN;
+        lt.tm_mon = 0; lt.tm_mday = 1; lt.tm_hour = 12; lt.tm_min = 0;
+    }
+    lv_roller_set_selected(clock_rollers[0], y - CLOCK_YEAR_MIN, LV_ANIM_OFF);
+    lv_roller_set_selected(clock_rollers[1], lt.tm_mon, LV_ANIM_OFF);
+    lv_roller_set_selected(clock_rollers[2], lt.tm_mday - 1, LV_ANIM_OFF);
+    lv_roller_set_selected(clock_rollers[3], lt.tm_hour, LV_ANIM_OFF);
+    lv_roller_set_selected(clock_rollers[4], lt.tm_min, LV_ANIM_OFF);
+    lv_obj_clear_flag(clock_overlay, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(clock_overlay);
+}
+
+// Build "aa\nbb\n..." roller options for a zero-padded numeric range.
+static void build_num_options(char *buf, size_t bufsz, int from, int to, int width)
+{
+    size_t pos = 0;
+    for (int v = from; v <= to && pos + 8 < bufsz; v++) {
+        pos += (size_t)snprintf(&buf[pos], bufsz - pos, "%0*d%s",
+                                width, v, (v < to) ? "\n" : "");
+    }
+}
+
+static void create_clock_editor(lv_obj_t *parent)
+{
+    static char opt_year[(CLOCK_YEAR_MAX - CLOCK_YEAR_MIN + 1) * 6];
+    static char opt_month[12 * 4], opt_day[31 * 4];
+    static char opt_hour[24 * 4], opt_min[60 * 4];
+    build_num_options(opt_year, sizeof(opt_year), CLOCK_YEAR_MIN, CLOCK_YEAR_MAX, 4);
+    build_num_options(opt_month, sizeof(opt_month), 1, 12, 2);
+    build_num_options(opt_day, sizeof(opt_day), 1, 31, 2);
+    build_num_options(opt_hour, sizeof(opt_hour), 0, 23, 2);
+    build_num_options(opt_min, sizeof(opt_min), 0, 59, 2);
+
+    clock_overlay = lv_obj_create(parent);
+    lv_obj_set_size(clock_overlay, 620, 340);
+    lv_obj_center(clock_overlay);
+    lv_obj_set_style_bg_color(clock_overlay, lv_color_hex(0x161b22), 0);
+    lv_obj_set_style_bg_opa(clock_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(clock_overlay, 2, 0);
+    lv_obj_set_style_border_color(clock_overlay, COL_ACCENT, 0);
+    lv_obj_set_style_radius(clock_overlay, 12, 0);
+    lv_obj_set_style_pad_all(clock_overlay, 14, 0);
+    lv_obj_clear_flag(clock_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(clock_overlay, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *title = lv_label_create(clock_overlay);
+    lv_label_set_text(title, "Set Clock");
+    lv_obj_set_style_text_color(title, COL_ACCENT, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
+
+    // Rollers in a centered flex row of caption+roller columns:
+    //   Year  Month  Day  |  Hour  Min
+    // Flex handles all alignment; a spacer separates date from time.
+    lv_obj_t *rowc = lv_obj_create(clock_overlay);
+    lv_obj_remove_style_all(rowc);
+    lv_obj_set_size(rowc, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_align(rowc, LV_ALIGN_TOP_MID, 0, 36);
+    lv_obj_set_flex_flow(rowc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(rowc, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(rowc, 12, 0);
+
+    const char *caps[5]      = { "Year", "Month", "Day", "Hour", "Min" };
+    const char *opts[5]      = { opt_year, opt_month, opt_day, opt_hour, opt_min };
+    const lv_coord_t w[5]    = { 96, 76, 76, 76, 76 };
+    for (int i = 0; i < 5; i++) {
+        if (i == 3) {   // gap between the date and time groups
+            lv_obj_t *sp = lv_obj_create(rowc);
+            lv_obj_remove_style_all(sp);
+            lv_obj_set_size(sp, 14, 10);
+        }
+
+        lv_obj_t *col = lv_obj_create(rowc);
+        lv_obj_remove_style_all(col);
+        lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(col, 6, 0);
+
+        lv_obj_t *cap = lv_label_create(col);
+        lv_label_set_text(cap, caps[i]);
+        lv_obj_set_style_text_color(cap, COL_TEXT_FAINT, 0);
+        lv_obj_set_style_text_font(cap, &lv_font_montserrat_14, 0);
+
+        lv_obj_t *r = lv_roller_create(col);
+        lv_roller_set_options(r, opts[i], LV_ROLLER_MODE_NORMAL);
+        lv_roller_set_visible_row_count(r, 3);
+        lv_obj_set_width(r, w[i]);
+        lv_obj_set_style_bg_color(r, COL_BG_PANEL, 0);
+        lv_obj_set_style_border_width(r, 1, 0);
+        lv_obj_set_style_border_color(r, COL_CARD_BORDER, 0);
+        lv_obj_set_style_radius(r, 8, 0);
+        lv_obj_set_style_text_color(r, COL_TEXT_DIM, 0);
+        lv_obj_set_style_text_font(r, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_bg_color(r, COL_ACCENT, LV_PART_SELECTED);
+        lv_obj_set_style_text_color(r, COL_BG_DARK, LV_PART_SELECTED);
+        lv_obj_set_style_text_font(r, &lv_font_montserrat_16, LV_PART_SELECTED);
+        clock_rollers[i] = r;
+    }
+
+    const char *syms[2] = { LV_SYMBOL_OK, LV_SYMBOL_CLOSE };
+    lv_color_t cols[2]  = { COL_GREEN, COL_RED };
+    lv_event_cb_t cbs[2] = { clock_ok_cb, clock_cancel_cb };
+    int bx[2] = { -80, 80 };
+    for (int i = 0; i < 2; i++) {
+        lv_obj_t *b = lv_btn_create(clock_overlay);
+        lv_obj_set_size(b, 130, 50);
+        lv_obj_align(b, LV_ALIGN_BOTTOM_MID, bx[i], -4);
+        lv_obj_set_style_bg_color(b, cols[i], 0);
+        lv_obj_set_style_radius(b, 8, 0);
+        lv_obj_t *lb = lv_label_create(b);
+        lv_label_set_text(lb, syms[i]);
+        lv_obj_set_style_text_font(lb, &lv_font_montserrat_20, 0);
+        lv_obj_center(lb);
+        lv_obj_add_event_cb(b, cbs[i], LV_EVENT_CLICKED, NULL);
+    }
+}
+
+// ---------------------------------------------------------------------------
 //  Page switching
 // ---------------------------------------------------------------------------
 static void show_page(page_t p);
@@ -1768,6 +1928,7 @@ static void btn_detail_back_cb(lv_event_t *e)
     memset(info_val_labels, 0, sizeof(info_val_labels));
     memset(detail_val_labels, 0, sizeof(detail_val_labels));
     info_row_count = 0;
+    clock_row_val = NULL;
     lv_obj_clean(detail_content);
     show_page(PAGE_SETTINGS_GRID);
 }
@@ -1849,10 +2010,10 @@ static lv_obj_t *create_page_header(lv_obj_t *page, const char *title,
 // both fit the 9 LPS categories in 3 rows without scrolling.
 #if UI_COMPACT
 #define TILE_W    232
-#define TILE_H    124
-#define TILE_GAP  14
+#define TILE_H    118
+#define TILE_GAP  12
 #define GRID_COLS 3
-#define GRID_Y0   48
+#define GRID_Y0   60      /* clear of the Back button (ends at y=48) */
 #else
 #define TILE_W    200
 #define TILE_H    140
@@ -1943,6 +2104,7 @@ static void populate_detail(int cat_idx)
     memset(detail_val_labels, 0, sizeof(detail_val_labels));
     memset(info_val_labels, 0, sizeof(info_val_labels));
     info_row_count = 0;
+    clock_row_val = NULL;
 
     // Info rows (read-only)
     int n_info = get_info_count(cat->info_type);
@@ -2019,6 +2181,29 @@ static void populate_detail(int cat_idx)
         detail_val_labels[s] = lbl_val;
         lv_obj_add_event_cb(row, setting_item_cb, LV_EVENT_CLICKED, st);
     }
+
+    // Local (non-CAN) "Set Clock" row — General category only
+    if (cat->has_clock) {
+        lv_obj_t *row = lv_btn_create(detail_content);
+        lv_obj_set_size(row, DETAIL_ROW_W, 50);
+        lv_obj_set_style_bg_color(row, COL_BG_CARD, 0);
+        lv_obj_set_style_bg_color(row, lv_color_hex(0x2a3040), LV_STATE_PRESSED);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_pad_hor(row, 18, 0);
+
+        lv_obj_t *lbl_name = lv_label_create(row);
+        lv_label_set_text(lbl_name, "Set Clock");
+        lv_obj_set_style_text_color(lbl_name, COL_TEXT, 0);
+        lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_16, 0);
+        lv_obj_align(lbl_name, LV_ALIGN_LEFT_MID, 0, 0);
+
+        clock_row_val = lv_label_create(row);
+        lv_label_set_text(clock_row_val, "--:--");
+        lv_obj_set_style_text_color(clock_row_val, COL_ACCENT, 0);
+        lv_obj_set_style_text_font(clock_row_val, &lv_font_montserrat_16, 0);
+        lv_obj_align(clock_row_val, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_add_event_cb(row, open_clock_editor, LV_EVENT_CLICKED, NULL);
+    }
     lv_obj_scroll_to(detail_content, 0, 0, LV_ANIM_OFF);
 }
 
@@ -2053,6 +2238,21 @@ static void update_settings_detail(void)
             lv_label_set_text(detail_val_labels[s], vbuf);
         }
     }
+
+    if (clock_row_val) {
+        char vbuf[48];
+        time_t tnow = time(NULL);
+        struct tm lt;
+        localtime_r(&tnow, &lt);
+        if (lt.tm_year + 1900 >= 2024) {
+            snprintf(vbuf, sizeof(vbuf), "%04d-%02d-%02d %02d:%02d",
+                     lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday,
+                     lt.tm_hour, lt.tm_min);
+        } else {
+            snprintf(vbuf, sizeof(vbuf), "--:--");
+        }
+        lv_label_set_text(clock_row_val, vbuf);
+    }
 }
 
 static void create_settings_detail(lv_obj_t *parent)
@@ -2071,6 +2271,7 @@ static void create_settings_detail(lv_obj_t *parent)
     lv_obj_clear_flag(detail_content, LV_OBJ_FLAG_SCROLL_CHAIN);
 
     create_editor_overlay(page_detail);
+    create_clock_editor(page_detail);
     lv_obj_add_flag(page_detail, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -2606,6 +2807,7 @@ static void update_dashboard(void)
 #define PWR_DASHBOARD_TIMEOUT 30000
 #define PWR_STARTUP_GRACE_MS  15000   // Don't check idle for first 15s after boot
 #define PWR_IDLE_DEBOUNCE_MS  5000    // Must be idle for 5s straight before sleep
+#define PWR_TOUCH_STANDBY_TIMEOUT 60000 // Any touch defers standby this long
 
 // Standby timing. PWR_SLEEP_POLL_MS is both the touch response latency and the
 // length of each light-sleep slice; the CAN window numbers trade standby
@@ -3014,7 +3216,13 @@ static bool pwr_management_tick(void)
     switch (pwr_state) {
 
     case PWR_ACTIVE:
-        if (pwr_was_idle) {
+        // Using the touch screen defers standby — the display must never
+        // sleep in the middle of someone navigating the menus, even with
+        // the LPS switched off.
+        if (touch_is_pressed())
+            pwr_last_touch_ms = now;
+        if (pwr_was_idle &&
+            (now - pwr_last_touch_ms) >= PWR_TOUCH_STANDBY_TIMEOUT) {
             pwr_show_splash();
             pwr_state_start_ms = now;
             pwr_state = PWR_SLEEP_SPLASH;
@@ -3025,10 +3233,11 @@ static bool pwr_management_tick(void)
         return false;
 
     case PWR_SLEEP_SPLASH:
-        if (!lps_is_idle()) {
+        if (!lps_is_idle() || touch_is_pressed()) {
             pwr_remove_splash();
             pwr_state = PWR_ACTIVE;
-            ESP_LOGI(TAG, "[PWR] System active — cancel sleep");
+            pwr_last_touch_ms = now;
+            ESP_LOGI(TAG, "[PWR] System active/touch — cancel sleep");
             return false;
         }
         if (now - pwr_state_start_ms >= PWR_SPLASH_MS) {
@@ -3512,6 +3721,20 @@ void can_hmi_task(void *arg)
                 if (ble_conn && ble_pin_popup) {
                     lv_obj_add_flag(ble_pin_popup, LV_OBJ_FLAG_HIDDEN);
                 }
+
+                // Header clock from system time (synced from the PCF85063
+                // RTC at boot). Shows --:-- until the RTC has been set.
+                char clk[8];
+                time_t tnow = time(NULL);
+                struct tm lt;
+                localtime_r(&tnow, &lt);
+                if (lt.tm_year + 1900 >= 2024) {
+                    snprintf(clk, sizeof(clk), "%02d:%02d", lt.tm_hour, lt.tm_min);
+                } else {
+                    snprintf(clk, sizeof(clk), "--:--");
+                }
+                dashboard_ui_set_clock(clk);
+
                 last_ble_status_update = now_ble;
             }
             lvgl_port_unlock();

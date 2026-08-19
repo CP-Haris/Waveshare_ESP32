@@ -93,6 +93,11 @@ static void waveshare_esp32_s3_touch_reset(void)
 
 static esp_lcd_panel_handle_t s_panel_handle = NULL;
 
+i2c_master_bus_handle_t waveshare_i2c_bus(void)
+{
+    return i2c_bus;
+}
+
 /**
  * Create + init the RGB panel. Shared between cold boot and wake-from-standby
  * (the panel is deleted in standby to release its NO_LIGHT_SLEEP PM lock).

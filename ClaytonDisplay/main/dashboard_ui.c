@@ -132,6 +132,7 @@ static lv_obj_t *g_btn_dcout, *g_lbl_dcout;
 
 static lv_obj_t *g_ble_icon;
 static lv_obj_t *g_usb_icon, *g_usb_lbl;
+static lv_obj_t *g_clock;
 static lv_obj_t *g_btn_settings;
 static lv_obj_t *g_btn_error,  *g_lbl_error;
 
@@ -509,6 +510,14 @@ void dashboard_ui_create(lv_obj_t *parent, const dashboard_callbacks_t *cb)
     lv_obj_center(bnl);
     lv_obj_add_event_cb(bn, ev_next, LV_EVENT_CLICKED, NULL);
 
+    /* Clock — left of the settings gear (RTC time, "--:--" until valid) */
+    g_clock = lv_label_create(g_root);
+    lv_label_set_text(g_clock, "--:--");
+    lv_obj_set_style_text_color(g_clock, COL_TEXT_DIM, 0);
+    lv_obj_set_style_text_font(g_clock, &lv_font_montserrat_20, 0);
+    lv_obj_align(g_clock, LV_ALIGN_TOP_RIGHT,
+                 -(L.margin + L.gear + 16), L.margin + (L.gear - 20) / 2);
+
     /* Settings gear (top-right) */
     g_btn_settings = lv_btn_create(g_root);
     lv_obj_set_size(g_btn_settings, L.gear, L.gear);
@@ -541,6 +550,12 @@ void dashboard_ui_create(lv_obj_t *parent, const dashboard_callbacks_t *cb)
 }
 
 lv_obj_t *dashboard_ui_root(void) { return g_root; }
+
+void dashboard_ui_set_clock(const char *hhmm)
+{
+    if (!g_clock || !hhmm) return;
+    set_text_if_changed(g_clock, hhmm);
+}
 
 void dashboard_ui_set_ble(bool connected)
 {

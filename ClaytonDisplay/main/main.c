@@ -12,10 +12,12 @@
 #include "esp_sleep.h"
 #include "esp_system.h"
 
+#include <sys/time.h>
 #include "waveshare_rgb_lcd_port.h"
 #include "lvgl_port.h"
 #include "can_hmi.h"
 #include "usb_modem.h"
+#include "rtc_pcf85063.h"
 
 static const char *TAG = "main";
 
@@ -32,6 +34,20 @@ void app_main(void)
     // Initialize display, touch, and LVGL
     waveshare_esp32_s3_rgb_lcd_init();
     wavesahre_rgb_lcd_bl_on();
+
+    // Onboard PCF85063 RTC: sync the system clock once at boot. Set the RTC
+    // with the debug-port command "TS YYYYMMDDHHMMSS".
+    rtc_pcf85063_init(waveshare_i2c_bus());
+    struct tm rtc_tm;
+    if (rtc_pcf85063_get_time(&rtc_tm)) {
+        struct timeval tv = { .tv_sec = mktime(&rtc_tm) };
+        settimeofday(&tv, NULL);
+        ESP_LOGI(TAG, "RTC: %04d-%02d-%02d %02d:%02d:%02d",
+                 rtc_tm.tm_year + 1900, rtc_tm.tm_mon + 1, rtc_tm.tm_mday,
+                 rtc_tm.tm_hour, rtc_tm.tm_min, rtc_tm.tm_sec);
+    } else {
+        ESP_LOGW(TAG, "RTC time not valid (unset or battery lost)");
+    }
 
     // USB CAN modem (TinyUSB takes over the USB-C port: CDC0 = modem
     // protocol, CDC1 = console). Flashing now needs download mode — use

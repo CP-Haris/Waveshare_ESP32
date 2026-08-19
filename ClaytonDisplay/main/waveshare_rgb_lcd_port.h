@@ -116,6 +116,12 @@
 
 esp_err_t waveshare_esp32_s3_rgb_lcd_init();
 
+/**
+ * @brief The shared I2C bus (touch, CH422G, PCF85063 RTC). Valid after
+ *        waveshare_esp32_s3_rgb_lcd_init().
+ */
+i2c_master_bus_handle_t waveshare_i2c_bus(void);
+
 esp_err_t wavesahre_rgb_lcd_bl_on();
 esp_err_t wavesahre_rgb_lcd_bl_off();
 

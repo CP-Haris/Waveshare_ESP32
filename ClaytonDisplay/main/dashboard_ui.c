@@ -13,8 +13,11 @@
 
 #include "dashboard_ui.h"
 #include "ui_palette.h"
+#include "ui_screen.h"
 #include <stdio.h>
 #include <string.h>
+
+#if !UI_SKIN_CARBON  /* classic skin — the Carbon Blue skin lives in dashboard_carbon.c */
 
 /*==========================================================================
  *  Resolution-dependent layout
@@ -551,6 +554,8 @@ void dashboard_ui_create(lv_obj_t *parent, const dashboard_callbacks_t *cb)
 
 lv_obj_t *dashboard_ui_root(void) { return g_root; }
 
+void dashboard_ui_set_chart_window(int hours) { (void)hours; /* no chart */ }
+
 void dashboard_ui_set_clock(const char *hhmm)
 {
     if (!g_clock || !hhmm) return;
@@ -646,10 +651,10 @@ void dashboard_ui_update(const dashboard_model_t *m)
     set_text_if_changed(g_soc_pct, buf);
     lv_obj_set_style_text_color(g_soc_pct, sc, 0);
 
-    /* Time left */
+    /* Time left (+ = charging, - = discharging; bench-verified) */
     {
-        bool charging = m->battery_current_a < -0.5f;
-        bool discharging = m->battery_current_a > 0.5f;
+        bool charging = m->battery_current_a > 0.5f;
+        bool discharging = m->battery_current_a < -0.5f;
         int tmin = m->soc_time_min < 0 ? -m->soc_time_min : m->soc_time_min;
         if (tmin > 0) {
             int h = tmin / 60, mm = tmin % 60;
@@ -783,3 +788,5 @@ void dashboard_ui_update(const dashboard_model_t *m)
         lv_obj_set_style_bg_color(g_sys_dot[3], scol, 0);
     }
 }
+
+#endif /* !UI_SKIN_CARBON */

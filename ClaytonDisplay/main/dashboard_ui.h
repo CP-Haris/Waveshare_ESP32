@@ -41,7 +41,8 @@ typedef struct {
 
     /* SOC hero */
     float    soc_percent;         /* 0..100                                     */
-    float    battery_current_a;   /* + discharging, - charging                  */
+    float    battery_current_a;   /* + charging, - discharging (bench-verified
+                                     against a real LPS 2026-08-24)             */
     int      soc_time_min;        /* signed minutes remaining                   */
     float    battery_voltage_v;
 
@@ -52,9 +53,20 @@ typedef struct {
     int8_t   dc_input_state;      uint8_t dc_input_failure;  /* DC charge chip               */
     int8_t   solar_state;         uint8_t solar_failure;     /* solar chip + solar card      */
 
+    /* Full-scale (max) of each power bar, fetched from the unit via
+     * CAN_Extra GET_MAX. 0 = not (yet) known — the skin falls back to its
+     * compiled defaults. A live value above the bar's max = overload
+     * (blinking yellow in the Carbon skin). */
+    float    ac_in_max_w;
+    float    dc_in_max_w;
+    float    solar_max_w;
+    float    ac_out_max_w;
+    float    dc_out_max_w;
+
     /* System card live values */
     float    dc_output_voltage_v, dc_output_current_a;
     float    solar_current_a;
+    float    dc_input_voltage_v, dc_input_current_a;  /* vehicle/DC charge input */
     uint16_t ac_output_power_w;   float ac_output_voltage_v, ac_output_current_a;
     uint16_t ac_input_power_w;    float ac_input_voltage_v, ac_input_current_a;
 
@@ -103,6 +115,11 @@ typedef enum {
 
 /** Update only the USB status icon (separate, low-rate path). */
 void dashboard_ui_set_usb(dash_usb_status_t status);
+
+/** Select how many hours of SoC history the prognosis chart spans (1..24).
+ *  The chart's sample buffer restarts on change. Persisting the choice is
+ *  the caller's job. No-op in the classic skin (it has no chart). */
+void dashboard_ui_set_chart_window(int hours);
 
 #ifdef __cplusplus
 }

@@ -29,12 +29,20 @@ set(SIM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/ui_demo.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/ui_doc.c"
     "${REPO_MAIN}/dashboard_ui.c"      # the REAL dashboard, shared with firmware
+    "${REPO_MAIN}/dashboard_carbon.c"  # Carbon Blue skin (UI_SKIN_CARBON in ui_screen.h)
+    "${REPO_MAIN}/icons_carbon.c"      # Carbon pictograms (generated)
+    "${REPO_MAIN}/fonts/cb_font_84.c"
+    "${REPO_MAIN}/fonts/cb_font_42.c"
+    "${REPO_MAIN}/fonts/cb_font_22.c"
+    "${REPO_MAIN}/fonts/cb_font_16.c"
+    "${REPO_MAIN}/fonts/cb_font_14.c"
 )
 
 add_executable(clayton_sim ${SIM_SOURCES} ${LVGL_SOURCES})
 
 # lv_conf.h lives in this folder; LV_CONF_INCLUDE_SIMPLE makes LVGL find it.
-target_compile_definitions(clayton_sim PRIVATE LV_CONF_INCLUDE_SIMPLE)
+# LV_LVGL_H_INCLUDE_SIMPLE makes the lv_font_conv output include "lvgl.h".
+target_compile_definitions(clayton_sim PRIVATE LV_CONF_INCLUDE_SIMPLE LV_LVGL_H_INCLUDE_SIMPLE)
 
 target_include_directories(clayton_sim PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"      # lv_conf.h, sdl_driver.h

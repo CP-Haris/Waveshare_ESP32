@@ -30,8 +30,42 @@
 #include "ui_palette.h"
 #include "ui_screen.h"
 #include "dashboard_ui.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 
 static const char *TAG = "can_hmi";
+
+// ---------------------------------------------------------------------------
+//  Local display settings (NVS-persisted, not CAN-backed)
+// ---------------------------------------------------------------------------
+// Graph Window: hours of SoC history shown by the Carbon prognosis chart.
+static uint8_t graph_win_hours = 2;
+static const uint8_t graph_win_steps[] = { 1, 2, 4, 8, 12, 24 };
+
+static void graph_win_load(void)
+{
+    // nvs_flash_init() is idempotent; BLE also initializes it later.
+    nvs_flash_init();
+    nvs_handle_t h;
+    if (nvs_open("display", NVS_READONLY, &h) == ESP_OK) {
+        uint8_t v = 0;
+        if (nvs_get_u8(h, "graph_h", &v) == ESP_OK && v >= 1 && v <= 24)
+            graph_win_hours = v;
+        nvs_close(h);
+    }
+    dashboard_ui_set_chart_window(graph_win_hours);
+}
+
+static void graph_win_save(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("display", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "graph_h", graph_win_hours);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    dashboard_ui_set_chart_window(graph_win_hours);
+}
 
 #define DASHBOARD_UI_UPDATE_MS 200
 
@@ -239,6 +273,9 @@ esp_err_t can_hmi_bus_start(void)
     g_config.tx_queue_len = 64;
     g_config.rx_queue_len = 32;
 
+    /* 125 kbps confirmed against a real LPS on the bench (2026-08-24): at
+     * 250 kbps nothing is received, at 125 kbps the unit's broadcasts arrive.
+     * Docs/Hardware.md's "250 kbps" does not match the actual bus. */
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_125KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -818,6 +855,9 @@ static int unit_add(uint8_t addr)
             unit_table[i].id_request_time = now_ms();
             ESP_LOGI(TAG, "Discovered unit #%d at addr 0x%02X", i, addr);
             can_request_id(addr);
+            // Fetch the bar full-scale limits (dial max + overload threshold)
+            can_get_max(60, 2);   // AC input: Max Current
+            can_get_max(30, 7);   // DC input: Charge Current
             if (selected_unit < 0)
                 select_unit(i);
             return i;
@@ -2095,6 +2135,22 @@ static void setting_item_cb(lv_event_t *e)
     open_editor(s);
 }
 
+// Cycle the local Graph Window setting (1/2/4/8/12/24 h) and persist it.
+static void graph_win_cycle_cb(lv_event_t *e)
+{
+    lv_obj_t *val_lbl = (lv_obj_t *)lv_event_get_user_data(e);
+    buzzer_click();
+
+    int n = (int)(sizeof(graph_win_steps) / sizeof(graph_win_steps[0]));
+    int idx = 0;
+    for (int i = 0; i < n; i++)
+        if (graph_win_steps[i] == graph_win_hours) { idx = i; break; }
+    graph_win_hours = graph_win_steps[(idx + 1) % n];
+
+    if (val_lbl) lv_label_set_text_fmt(val_lbl, "%d h", graph_win_hours);
+    graph_win_save();
+}
+
 static void populate_detail(int cat_idx)
 {
     detail_cat_idx = cat_idx;
@@ -2203,6 +2259,28 @@ static void populate_detail(int cat_idx)
         lv_obj_set_style_text_font(clock_row_val, &lv_font_montserrat_16, 0);
         lv_obj_align(clock_row_val, LV_ALIGN_RIGHT_MID, 0, 0);
         lv_obj_add_event_cb(row, open_clock_editor, LV_EVENT_CLICKED, NULL);
+
+        // Local "Graph Window" row — hours of SoC history on the dashboard
+        // chart. Tapping cycles 1/2/4/8/12/24 h; persisted in NVS.
+        lv_obj_t *grow = lv_btn_create(detail_content);
+        lv_obj_set_size(grow, DETAIL_ROW_W, 50);
+        lv_obj_set_style_bg_color(grow, COL_BG_CARD, 0);
+        lv_obj_set_style_bg_color(grow, lv_color_hex(0x2a3040), LV_STATE_PRESSED);
+        lv_obj_set_style_radius(grow, 8, 0);
+        lv_obj_set_style_pad_hor(grow, 18, 0);
+
+        lv_obj_t *glbl = lv_label_create(grow);
+        lv_label_set_text(glbl, "Graph Window");
+        lv_obj_set_style_text_color(glbl, COL_TEXT, 0);
+        lv_obj_set_style_text_font(glbl, &lv_font_montserrat_16, 0);
+        lv_obj_align(glbl, LV_ALIGN_LEFT_MID, 0, 0);
+
+        lv_obj_t *gval = lv_label_create(grow);
+        lv_label_set_text_fmt(gval, "%d h", graph_win_hours);
+        lv_obj_set_style_text_color(gval, COL_ACCENT, 0);
+        lv_obj_set_style_text_font(gval, &lv_font_montserrat_16, 0);
+        lv_obj_align(gval, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_add_event_cb(grow, graph_win_cycle_cb, LV_EVENT_CLICKED, gval);
     }
     lv_obj_scroll_to(detail_content, 0, 0, LV_ANIM_OFF);
 }
@@ -2746,6 +2824,7 @@ static void create_dashboard(lv_obj_t *parent)
     };
     dashboard_ui_create(parent, &cb);
     page_dashboard = dashboard_ui_root();
+    graph_win_load();   // apply the NVS-persisted Graph Window setting
 }
 
 // ---------------------------------------------------------------------------
@@ -2778,6 +2857,8 @@ static void update_dashboard(void)
     m.dc_output_voltage_v = lps.dc_output_voltage_v;
     m.dc_output_current_a = lps.dc_output_current_a;
     m.solar_current_a     = lps.solar_current_a;
+    m.dc_input_voltage_v  = lps.dc_input_voltage_v;
+    m.dc_input_current_a  = lps.dc_input_current_a;
     m.ac_output_power_w   = lps.ac_output_power_w;
     m.ac_output_voltage_v = lps.ac_output_voltage_v;
     m.ac_output_current_a = lps.ac_output_current_a;
@@ -2787,6 +2868,17 @@ static void update_dashboard(void)
 
     m.error_count    = lps.failure_code_count;
     m.error_critical = (lps.failure_level >= FL_SIMPLE_FAILURE);
+
+    // Bar full-scale from CAN-fetched maxima (GET_MAX responses land in the
+    // settings tables). Current limits are converted to watts; 0 = unknown,
+    // the skin then uses its compiled default.
+    if (settings_ac_in[0].max_received)          /* Block 60 id 2: Max Current */
+        m.ac_in_max_w = Q16_TO_FLOAT(settings_ac_in[0].max_val) * 230.0f;
+    if (settings_dc_in[1].max_received) {        /* Block 30 id 7: Charge Current */
+        float v = (lps.dc_input_voltage_v > 1.0f) ? lps.dc_input_voltage_v : 13.8f;
+        m.dc_in_max_w = Q16_TO_FLOAT(settings_dc_in[1].max_val) * v;
+    }
+    /* solar / AC out / DC out maxima: CAN_Extra addresses TBD — skin defaults */
 
     dashboard_ui_update(&m);
 }

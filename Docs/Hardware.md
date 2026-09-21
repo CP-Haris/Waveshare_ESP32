@@ -169,7 +169,7 @@ All display parameters are configured in the ESP32 RGB panel driver at init time
 | Parameter | Value |
 |-----------|-------|
 | Protocol | J1939 (ISO 11898, 29-bit extended IDs) |
-| Baud rate | 250 kbps |
+| Baud rate | 125 kbps (bench-verified against LPS 2026-08-24; earlier docs said 250 kbps, but the unit is silent at that rate) |
 | Termination | 120 Ω at each end of the bus |
 | Connector | Typically DB9 or bare wire to LPS unit |
 

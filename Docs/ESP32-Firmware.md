@@ -122,7 +122,7 @@ Notable options:
 | Parameter | Value |
 |-----------|-------|
 | Standard | J1939 (29-bit extended CAN ID) |
-| Speed | 250 kbps |
+| Speed | 125 kbps (bench-verified against LPS 2026-08-24; not 250 kbps as previously documented) |
 | TX GPIO | 15 |
 | RX GPIO | 16 |
 | Peripheral | ESP32-S3 TWAI |

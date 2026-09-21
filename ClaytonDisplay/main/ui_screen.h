@@ -36,4 +36,13 @@
 /** 1 on the small panel - selects the compact UI variants. */
 #define UI_COMPACT  (!UI_PANEL_1024_600)
 
+/* ===== Skin switch: 0 = classic "Midnight" dashboard (dashboard_ui.c),
+ *                    1 = "Carbon Blue" instrument skin (dashboard_carbon.c).
+ * Both files implement the same dashboard_ui.h API; exactly one is compiled
+ * in (the other compiles to an empty translation unit), so callers and the
+ * PC simulator need no changes when switching. */
+#ifndef UI_SKIN_CARBON
+#define UI_SKIN_CARBON  (1)
+#endif
+
 #endif /* UI_SCREEN_H */

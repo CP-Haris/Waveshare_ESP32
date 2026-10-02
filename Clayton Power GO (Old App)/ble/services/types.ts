@@ -1,0 +1,1 @@
+export type OnParsedMessageCallback = (cmd: number, block: number, id: number, rawValue: number) => void; 

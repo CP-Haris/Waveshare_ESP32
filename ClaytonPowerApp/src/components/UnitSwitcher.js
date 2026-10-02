@@ -1,25 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { colors, fontSize, spacing } from '../utils/theme';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import CarbonIcon from './CarbonIcon';
+import { IconButton, Sheet } from './Carbon';
+import { colors, font, spacing, type } from '../utils/theme';
 import { unitFamily } from '../utils/units';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
 
-function unitKind(unit) {
+function unitTag(unit) {
   const family = unitFamily(unit || {});
-  if (family === 'bms') return 'Battery';
+  if (family === 'bms') return 'BMS';
   if (family === 'lps') return 'LPS';
-  return 'Unit';
+  return 'UNIT';
 }
 
-function unitLabel(unit) {
-  if (!unit) return 'Select unit';
-  const primary = String(unit.partNumber || '').trim() || unitKind(unit);
-  const serialSuffix = String(unit.serial || '').replace(/\D/g, '').slice(-4);
-  return serialSuffix ? `${primary} - ${serialSuffix}` : primary;
+function serialSuffix(unit) {
+  return String(unit?.serial || '').replace(/\D/g, '').slice(-4);
 }
 
+/** Unit chip + picker sheet (spec §9). */
 export default function UnitSwitcher() {
   const [connected, setConnected] = useState(bleService.isConnected);
   const [units, setUnits] = useState(() => canGatewayService.getUnits());
@@ -68,145 +67,113 @@ export default function UnitSwitcher() {
 
   if (!connected || units.length === 0) return null;
 
-  const disabled = locked;
-
   const selectUnit = (unit) => {
-    if (disabled) return;
+    if (locked) return;
     canGatewayService.selectUnit(unit.index);
     setModalVisible(false);
   };
 
+  const suffix = serialSuffix(activeUnit);
+
   return (
     <>
-      <TouchableOpacity
-        style={[styles.trigger, disabled && styles.triggerDisabled]}
+      <Pressable
+        style={({ pressed }) => [styles.chip, pressed && styles.chipPressed, locked && styles.locked]}
         onPress={() => setModalVisible(true)}
-        disabled={disabled}
-        activeOpacity={0.85}
+        disabled={locked}
+        hitSlop={4}
       >
-        <MaterialIcons name={disabled ? 'lock' : 'swap-vert'} size={16} color={disabled ? colors.textGhost : colors.accent} />
-        <Text style={[styles.triggerText, disabled && styles.triggerTextDisabled]} numberOfLines={1}>
-          {unitLabel(activeUnit)}
-        </Text>
-        <MaterialIcons name="expand-more" size={16} color={colors.textMuted} />
-      </TouchableOpacity>
+        <Text style={styles.chipTag}>{activeUnit ? unitTag(activeUnit) : 'UNIT'}</Text>
+        {!!suffix && <Text style={styles.chipText}>{suffix}</Text>}
+        <CarbonIcon name={locked ? 'lock' : 'chevDown'} size={14} color={colors.dim} strokeWidth={2} />
+      </Pressable>
 
-      <Modal
+      <Sheet
         visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity style={styles.backdropTapArea} onPress={() => setModalVisible(false)} activeOpacity={1} />
-          <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetTitle}>Select unit</Text>
-                <Text style={styles.sheetMeta}>{units.length} discovered</Text>
-              </View>
-              <View style={styles.headerActions}>
-                <TouchableOpacity style={styles.iconButton} onPress={() => canGatewayService.requestUnits()} activeOpacity={0.85}>
-                  <MaterialIcons name="refresh" size={20} color={colors.accent} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton} onPress={() => setModalVisible(false)} activeOpacity={0.85}>
-                  <MaterialIcons name="close" size={20} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <ScrollView style={styles.unitList} contentContainerStyle={styles.unitListContent}>
-              {units.map((unit) => {
-                const isActive = unit.index === activeUnit?.index;
-                const hasErrors = unit.errorCount > 0;
-                return (
-                  <TouchableOpacity
-                    key={unit.index}
-                    style={[styles.unitRow, isActive && styles.unitRowActive]}
-                    onPress={() => selectUnit(unit)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.unitIconWrap}>
-                      <MaterialIcons name={unitKind(unit) === 'Battery' ? 'battery-full' : 'memory'} size={19} color={isActive ? colors.accent : colors.textMuted} />
-                    </View>
-                    <View style={styles.unitCopy}>
-                      <Text style={styles.unitTitle}>{unitKind(unit)}</Text>
-                      <Text style={styles.unitSub} numberOfLines={1}>{unit.partNumber || '-'}</Text>
-                      <Text style={styles.unitSerial} numberOfLines={1}>{unit.serial || '-'}</Text>
-                    </View>
-                    {hasErrors && (
-                      <View style={styles.errorBadge}>
-                        <Text style={styles.errorBadgeText}>{unit.errorCount}</Text>
-                      </View>
-                    )}
-                    <MaterialIcons
-                      name={isActive ? 'check-circle' : 'radio-button-unchecked'}
-                      size={21}
-                      color={isActive ? colors.green : colors.textGhost}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+        onClose={() => setModalVisible(false)}
+        title="SELECT UNIT"
+        right={(
+          <View style={styles.headActions}>
+            <IconButton icon="refresh" color={colors.blue} onPress={() => canGatewayService.requestUnits()} />
+            <IconButton icon="close" onPress={() => setModalVisible(false)} />
           </View>
-        </View>
-      </Modal>
+        )}
+      >
+        <ScrollView style={styles.list}>
+          {units.map((unit, i) => {
+            const isActive = unit.index === activeUnit?.index;
+            return (
+              <Pressable
+                key={unit.index}
+                style={({ pressed }) => [styles.row, isActive && styles.rowActive, pressed && styles.chipPressed, i === units.length - 1 && styles.rowLast]}
+                onPress={() => selectUnit(unit)}
+              >
+                <View style={[styles.radio, isActive && styles.radioOn]}>
+                  {isActive && <View style={styles.radioDot} />}
+                </View>
+                <Text style={styles.rowTag}>{unitTag(unit)}</Text>
+                <View style={styles.rowCopy}>
+                  <Text style={type.label} numberOfLines={1}>{unit.partNumber || '—'}</Text>
+                  <Text style={type.small} numberOfLines={1}>{unit.serial || '—'}</Text>
+                </View>
+                {unit.errorCount > 0 && (
+                  <View style={styles.err}>
+                    <CarbonIcon name="warn" size={16} color={colors.red} />
+                    <Text style={styles.errText}>{unit.errorCount}</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </Sheet>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  trigger: {
-    maxWidth: 178,
-    minHeight: 34,
-    borderRadius: 8,
+  chip: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.panel,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgElevated,
+    borderColor: colors.edge,
+  },
+  chipPressed: { backgroundColor: colors.panelPressed },
+  locked: { opacity: 0.5 },
+  chipTag: { fontFamily: font.bold, fontSize: 15, letterSpacing: 1.2, color: colors.blue },
+  chipText: { fontFamily: font.bold, fontSize: 15, letterSpacing: 1.2, color: colors.ink, fontVariant: ['tabular-nums'] },
+
+  headActions: { flexDirection: 'row', gap: spacing.sm },
+  list: { maxHeight: 440, marginTop: spacing.sm },
+  row: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.rowLine,
   },
-  triggerDisabled: { opacity: 0.55 },
-  triggerText: { color: colors.text, fontSize: fontSize.sm, fontWeight: '800', flexShrink: 1 },
-  triggerTextDisabled: { color: colors.textMuted },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', justifyContent: 'flex-end' },
-  backdropTapArea: { ...StyleSheet.absoluteFillObject },
-  sheet: {
-    maxHeight: '72%',
-    backgroundColor: colors.bgElevated,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+  rowActive: { backgroundColor: colors.panel },
+  rowLast: { borderBottomWidth: 0 },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.dim, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: colors.blue },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue },
+  rowTag: {
+    fontFamily: font.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: colors.blue,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    borderColor: colors.edge,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
   },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginBottom: spacing.md },
-  sheetTitle: { color: colors.text, fontSize: fontSize.lg, fontWeight: '800' },
-  sheetMeta: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700', marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  iconButton: { width: 38, height: 38, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle },
-  unitList: { maxHeight: 430 },
-  unitListContent: { paddingBottom: spacing.sm },
-  unitRow: {
-    minHeight: 76,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.bgCard,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  unitRowActive: { borderColor: colors.accent, backgroundColor: colors.bgInset },
-  unitIconWrap: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.borderSubtle },
-  unitCopy: { flex: 1, minWidth: 0 },
-  unitTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800' },
-  unitSub: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
-  unitSerial: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 2, fontWeight: '700' },
-  errorBadge: { minWidth: 24, height: 24, borderRadius: 12, backgroundColor: colors.redBg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7, borderWidth: 1, borderColor: colors.red },
-  errorBadgeText: { color: colors.redSoft, fontSize: fontSize.xs, fontWeight: '800' },
+  rowCopy: { flex: 1, minWidth: 0 },
+  err: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  errText: { fontFamily: font.bold, fontSize: 15, color: colors.red },
 });

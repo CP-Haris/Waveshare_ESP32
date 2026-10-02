@@ -36,9 +36,9 @@ static esp_err_t i2c_master_init(void)
 }
 
 /**
- * @brief Helper to write a single byte via I2C to a device (replaces legacy i2c_master_write_to_device)
+ * @brief Helper to write bytes via I2C to a device (replaces legacy i2c_master_write_to_device)
  */
-static esp_err_t i2c_write_byte(uint8_t dev_addr, uint8_t data)
+static esp_err_t i2c_write_bytes(uint8_t dev_addr, const uint8_t *data, size_t len)
 {
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -48,9 +48,102 @@ static esp_err_t i2c_write_byte(uint8_t dev_addr, uint8_t data)
     i2c_master_dev_handle_t dev;
     esp_err_t ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg, &dev);
     if (ret != ESP_OK) return ret;
-    ret = i2c_master_transmit(dev, &data, 1, I2C_MASTER_TIMEOUT_MS);
+    ret = i2c_master_transmit(dev, data, len, I2C_MASTER_TIMEOUT_MS);
     i2c_master_bus_rm_device(dev);
     return ret;
+}
+
+static esp_err_t i2c_write_byte(uint8_t dev_addr, uint8_t data)
+{
+    return i2c_write_bytes(dev_addr, &data, 1);
+}
+
+/* ---------------------------------------------------------------------------
+ * IO-expander access layer. All expander outputs go through a shadow byte so
+ * every write carries the full, current pin state — the two chips just take
+ * different protocols:
+ *   CH422G (Waveshare):  mode byte to addr 0x24, output byte to addr 0x38
+ *   PCA9554 (CP board):  reg 0x03 = direction (0 = output), reg 0x01 = output
+ * ------------------------------------------------------------------------- */
+#if BOARD_CP_DISPLAY
+/* Boot state: panel enabled + resets released + SD deselected; backlight and
+ * buzzer off; NVM_RST (design leftover) low; CAN_S high = transceiver stays
+ * in standby until can_hmi enables it. TP_RST starts low — the GT911 reset
+ * sequence releases it. */
+static uint8_t s_exp_shadow = EXP_DISP | EXP_LCD_RST | EXP_SDCS | EXP_CAN_S;
+static bool s_exp_dir_set = false;
+#else
+static uint8_t s_exp_shadow = EXP_DISP | EXP_LCD_RST | EXP_SDCS | EXP_IDLE_BITS;
+#endif
+
+static esp_err_t exp_flush(void)
+{
+#if BOARD_CP_DISPLAY
+    static esp_err_t s_last_err = ESP_OK;
+    if (!s_exp_dir_set) {
+        const uint8_t cfg[2] = { 0x03, 0x00 };   /* all pins outputs */
+        if (i2c_write_bytes(EXP_PCA9554_ADDR, cfg, 2) == ESP_OK)
+            s_exp_dir_set = true;
+    }
+    const uint8_t out[2] = { 0x01, s_exp_shadow };
+    esp_err_t err = i2c_write_bytes(EXP_PCA9554_ADDR, out, 2);
+    if (err != s_last_err) {                     /* log on state change only */
+        if (err != ESP_OK)
+            ESP_LOGW(TAG, "PCA9554 write FAILED: %s (addr 0x%02X, out=0x%02X)",
+                     esp_err_to_name(err), EXP_PCA9554_ADDR, s_exp_shadow);
+        else
+            ESP_LOGI(TAG, "PCA9554 write ok (out=0x%02X)", s_exp_shadow);
+        s_last_err = err;
+    }
+    return err;
+#else
+    i2c_write_byte(0x24, 0x01);                  /* CH422G output mode */
+    return i2c_write_byte(0x38, s_exp_shadow);
+#endif
+}
+
+static esp_err_t exp_update(uint8_t set_bits, uint8_t clear_bits)
+{
+    s_exp_shadow = (uint8_t)((s_exp_shadow | set_bits) & ~clear_bits);
+    return exp_flush();
+}
+
+/* Recover a jammed I2C bus before the driver takes the pins. The GT911 powers
+ * up with TP_RST floating (PCA9554 pins are hi-Z until first config write) and
+ * can come up mid-transaction, holding SDA low — which then blocks EVERY bus
+ * device, including the expander itself. Standard cure: clock SCL manually
+ * until the slave releases SDA, then issue a STOP. Harmless when the bus is
+ * already idle. */
+static void i2c_bus_clear(void)
+{
+    gpio_config_t od = {
+        .pin_bit_mask = (1ULL << I2C_MASTER_SCL_IO) | (1ULL << I2C_MASTER_SDA_IO),
+        .mode = GPIO_MODE_INPUT_OUTPUT_OD,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&od);
+    gpio_set_level(I2C_MASTER_SCL_IO, 1);
+    gpio_set_level(I2C_MASTER_SDA_IO, 1);
+    esp_rom_delay_us(10);
+
+    if (gpio_get_level(I2C_MASTER_SDA_IO) == 0) {
+        ESP_LOGW(TAG, "I2C: SDA stuck low at boot — clocking bus free");
+        for (int i = 0; i < 16 && gpio_get_level(I2C_MASTER_SDA_IO) == 0; i++) {
+            gpio_set_level(I2C_MASTER_SCL_IO, 0);
+            esp_rom_delay_us(10);
+            gpio_set_level(I2C_MASTER_SCL_IO, 1);
+            esp_rom_delay_us(10);
+        }
+        /* STOP: SDA low->high while SCL high */
+        gpio_set_level(I2C_MASTER_SDA_IO, 0);
+        esp_rom_delay_us(10);
+        gpio_set_level(I2C_MASTER_SDA_IO, 1);
+        esp_rom_delay_us(10);
+        ESP_LOGW(TAG, "I2C: bus clear done, SDA=%d", gpio_get_level(I2C_MASTER_SDA_IO));
+    }
+    gpio_reset_pin(I2C_MASTER_SCL_IO);
+    gpio_reset_pin(I2C_MASTER_SDA_IO);
 }
 
 // GPIO initialization
@@ -71,14 +164,12 @@ static void gpio_init(void)
 // Reset the touch screen
 static void waveshare_esp32_s3_touch_reset(void)
 {
-    i2c_write_byte(0x24, 0x01);
-
     // Reset the touch screen. It is recommended to reset the touch screen before using it.
-    i2c_write_byte(0x38, 0x2C);
+    exp_update(0, EXP_TP_RST);            // TP_RST low (reset asserted)
     esp_rom_delay_us(100 * 1000);
     gpio_set_level(GPIO_INPUT_IO_4, 0);   // INT low during reset -> I2C addr 0x5D
     esp_rom_delay_us(100 * 1000);
-    i2c_write_byte(0x38, 0x2E);
+    exp_update(EXP_TP_RST, 0);            // release reset
     esp_rom_delay_us(200 * 1000);
 
     // Release CTP_IRQ. From here on it is GT911's OUTPUT (data-ready signal);
@@ -182,7 +273,16 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
     esp_lcd_touch_handle_t tp_handle = NULL; // Declare a handle for the touch panel
 #if CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
     ESP_LOGI(TAG, "Initialize I2C bus");   // Log the initialization of the I2C bus
+    i2c_bus_clear();                       // Free the bus if a slave holds SDA low
     i2c_master_init();                     // Initialize the I2C master
+
+    // One-shot bus scan — bring-up diagnostics (expander/RTC/GT911 presence)
+    ESP_LOGI(TAG, "I2C bus scan:");
+    for (uint8_t a = 0x08; a <= 0x77; a++) {
+        if (i2c_master_probe(i2c_bus, a, 50) == ESP_OK)
+            ESP_LOGI(TAG, "  I2C device @ 0x%02X", a);
+    }
+
     ESP_LOGI(TAG, "Initialize GPIO");      // Log GPIO initialization
     gpio_init();                           // Initialize GPIO pins
     ESP_LOGI(TAG, "Initialize Touch LCD"); // Log touch LCD initialization
@@ -210,7 +310,15 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
             .mirror_y = 0, // No mirroring of Y
         },
     };
-    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp_handle)); // Create new I2C GT911 touch controller
+    // Touch is OPTIONAL during bring-up: a missing/unplugged touch FPC must
+    // not brick the boot (the whole UI still runs, just without touch input;
+    // lvgl_port_init handles tp_handle == NULL).
+    esp_err_t tp_err = esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp_handle);
+    if (tp_err != ESP_OK) {
+        ESP_LOGW(TAG, "GT911 not responding (%s) — continuing WITHOUT touch",
+                 esp_err_to_name(tp_err));
+        tp_handle = NULL;
+    }
 #endif                                                                               // CONFIG_EXAMPLE_LCD_TOUCH_CONTROLLER_GT911
 
     ESP_ERROR_CHECK(lvgl_port_init(s_panel_handle, tp_handle)); // Initialize LVGL with the panel and touch handles
@@ -228,25 +336,23 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init()
 /******************************* Turn on the screen backlight **************************************/
 esp_err_t wavesahre_rgb_lcd_bl_on()
 {
-    // Configure CH422G to output mode
-    i2c_write_byte(0x24, 0x01);
-
-    // Pull the backlight pin high to light the screen backlight
-    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_DISP | CH422G_LCD_RST |
-                         CH422G_SDCS | CH422G_DI_IDLE);
-    return ESP_OK;
+#if BOARD_CP_DISPLAY
+    // Panel enable (DISP_ON) + backlight boost (BL_ON) are separate pins here
+    return exp_update(EXP_DISP | EXP_BL_ON, 0);
+#else
+    // On the Waveshare board the DISP bit IS the backlight boost enable
+    return exp_update(EXP_DISP | EXP_TP_RST | EXP_LCD_RST | EXP_SDCS, 0);
+#endif
 }
 
 /******************************* Turn off the screen backlight **************************************/
 esp_err_t wavesahre_rgb_lcd_bl_off()
 {
-    // Configure CH422G to output mode
-    i2c_write_byte(0x24, 0x01);
-
-    // Turn off the screen backlight by pulling the backlight pin low
-    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_LCD_RST | CH422G_SDCS |
-                         CH422G_DI_IDLE);
-    return ESP_OK;
+#if BOARD_CP_DISPLAY
+    return exp_update(0, EXP_BL_ON);      // panel stays enabled, just dark
+#else
+    return exp_update(0, EXP_DISP);
+#endif
 }
 
 /* All LCD output pins (used for sleep isolation + wake restore) */
@@ -306,27 +412,21 @@ esp_err_t waveshare_lcd_panel_wake(void)
     return ESP_OK;
 }
 
-/******************************* LCD hardware reset via CH422G **********************
- * CH422G IO3 (0x08) = LCD_RST on this board.
+/******************************* LCD hardware reset via IO expander ****************
  * Asserting reset puts the ST7262 LCD driver IC into hardware reset,
  * which drastically reduces its current draw through VCC.
- * GT911 remains operational (IO1 = TP_RST stays deasserted).
+ * GT911 remains operational (TP_RST stays deasserted).
  */
 esp_err_t waveshare_lcd_reset_assert(void)
 {
-    i2c_write_byte(0x24, 0x01);   // CH422G output mode
-    // IO1=1(TP_RST released) + IO4=1(SD/INT) → IO3=0 means LCD_RST asserted
-    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_SDCS | CH422G_DI_IDLE);
+    exp_update(0, EXP_LCD_RST);
     ESP_LOGI(TAG, "LCD RST asserted (ST7262 in HW reset)");
     return ESP_OK;
 }
 
 esp_err_t waveshare_lcd_reset_release(void)
 {
-    i2c_write_byte(0x24, 0x01);   // CH422G output mode
-    // IO1=1 + IO3=1 + IO4=1, BL still off
-    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_LCD_RST | CH422G_SDCS |
-                         CH422G_DI_IDLE);
+    exp_update(EXP_LCD_RST, 0);
     ESP_LOGI(TAG, "LCD RST released");
     vTaskDelay(pdMS_TO_TICKS(20)); // Let ST7262 come out of reset
     return ESP_OK;
@@ -353,24 +453,233 @@ void waveshare_lcd_pins_float(void)
     ESP_LOGI(TAG, "LCD pins driven LOW -- no shoot-through");
 }
 
-/******************************* CH422G all IOs LOW ********************************/
+/******************************* Expander standby state ****************************/
 esp_err_t waveshare_ch422g_all_low(void)
 {
-    i2c_write_byte(0x24, 0x01);   // Push-pull output mode
-    // IO1(CTP_RST)=HIGH so GT911 stays operational (not HW reset).
-    // IO2(DISP)=LOW, IO3(LCD_RST)=LOW, IO4(SDCS)=LOW.
-    // IO0/IO5 (DI0/DI1) are held HIGH — see CH422G_DI_IDLE.
-    i2c_write_byte(0x38, CH422G_CTP_RST | CH422G_DI_IDLE);
-    ESP_LOGI(TAG, "CH422G IOs low (CTP_RST kept HIGH)");
+    // TP_RST stays HIGH so the GT911 remains operational (touch wake).
+    // Panel enable, LCD reset, SD CS, backlight and buzzer all go low.
+    // CAN_S is deliberately left alone — it is owned by
+    // waveshare_can_transceiver_enable() (called from the TWAI lifecycle).
+#if BOARD_CP_DISPLAY
+    exp_update(EXP_TP_RST, EXP_DISP | EXP_LCD_RST | EXP_SDCS |
+                           EXP_BL_ON | EXP_BUZZ_ON | EXP_NVM_RST);
+#else
+    exp_update(EXP_TP_RST | EXP_IDLE_BITS,
+               EXP_DISP | EXP_LCD_RST | EXP_SDCS);
+#endif
+    ESP_LOGI(TAG, "Expander IOs low (TP_RST kept HIGH)");
     return ESP_OK;
 }
 
-/******************************* CH422G wake ***************************************/
+/******************************* Expander wake *************************************/
 esp_err_t waveshare_ch422g_wake(void)
 {
-    // Any I2C write to CH422G wakes it; SLEEP bit auto-clears.
-    // Set IO_OE mode explicitly to be safe.
-    return i2c_write_byte(0x24, 0x01);
+    // CH422G: any I2C write wakes it (SLEEP bit auto-clears).
+    // PCA9554 has no sleep state — re-flushing the shadow is harmless and
+    // restores the outputs in case the chip lost power in between.
+    return exp_flush();
+}
+
+/******************************* CAN transceiver standby ***************************/
+esp_err_t waveshare_can_transceiver_enable(bool enable)
+{
+#if BOARD_CP_DISPLAY
+    // S pin is pulled HIGH by R1 = standby; drive LOW for normal operation.
+    esp_err_t ret = enable ? exp_update(0, EXP_CAN_S)
+                           : exp_update(EXP_CAN_S, 0);
+    ESP_LOGI(TAG, "CAN transceiver %s", enable ? "normal mode" : "standby");
+    return ret;
+#else
+    (void)enable;   // Waveshare: S pin is hard-wired, nothing to do
+    return ESP_OK;
+#endif
+}
+
+/******************************* Buzzer click **************************************/
+#if BOARD_CP_DISPLAY
+#include "esp_timer.h"
+#include "rtc_pcf85063.h"
+
+/* Tone = RTC CLKOUT (PCF85063: 1024/2048/4096 Hz used here) gated by the
+ * expander's BUZZ_ON bit. A sequence is a chain of one-shot esp_timer steps:
+ * each note sets the CLKOUT frequency while the gate is closed, then opens
+ * the gate for its duration. CLKOUT is switched off after the last note.
+ * The buzzer (PKLCS1212E4001) resonates at 4 kHz, so lower notes are
+ * noticeably quieter. */
+typedef struct { uint16_t hz, on_ms, off_ms; } buzz_note_t;
+
+static const buzz_note_t k_click[]    = { {4096,  40,   0} };
+static const buzz_note_t k_warning[]  = { {2048, 150, 120}, {2048, 150,   0} };
+static const buzz_note_t k_failure[]  = { {4096, 200,  80}, {2048, 200,  80},
+                                          {1024, 300,   0} };            /* falling */
+static const buzz_note_t k_critical[] = { {4096, 250,  50}, {1024, 250,  50},
+                                          {4096, 250,  50}, {1024, 250,  50},
+                                          {4096, 250,  50}, {1024, 400,   0} }; /* siren */
+
+static esp_timer_handle_t  s_buzz_timer = NULL;
+static const buzz_note_t  *s_seq = NULL;
+static volatile int        s_seq_len = 0, s_seq_idx = 0;
+static volatile bool       s_tone_on = false;
+static volatile bool       s_alarm_busy = false;   /* multi-note alarm playing */
+
+static void buzz_note_start(const buzz_note_t *n)
+{
+    rtc_pcf85063_clkout_set_hz(n->hz);
+    exp_update(EXP_BUZZ_ON, 0);
+    s_tone_on = true;
+    esp_timer_start_once(s_buzz_timer, (uint64_t)n->on_ms * 1000);
+}
+
+static void buzzer_step_cb(void *arg)
+{
+    (void)arg;
+    if (s_tone_on) {                                    /* end of a note */
+        exp_update(0, EXP_BUZZ_ON);
+        s_tone_on = false;
+        const buzz_note_t *n = &s_seq[s_seq_idx];
+        if (++s_seq_idx < s_seq_len) {
+            esp_timer_start_once(s_buzz_timer, (uint64_t)(n->off_ms ? n->off_ms : 1) * 1000);
+            return;
+        }
+        rtc_pcf85063_clkout_set_hz(0);
+        s_alarm_busy = false;
+    } else if (s_seq_idx < s_seq_len) {                 /* next note */
+        buzz_note_start(&s_seq[s_seq_idx]);
+    }
+}
+
+static esp_err_t buzz_play(const buzz_note_t *seq, int len)
+{
+    if (!s_buzz_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = buzzer_step_cb,
+            .name = "buzz",
+        };
+        if (esp_timer_create(&args, &s_buzz_timer) != ESP_OK) return ESP_FAIL;
+    }
+    esp_timer_stop(s_buzz_timer);
+    exp_update(0, EXP_BUZZ_ON);
+    s_seq = seq;
+    s_seq_len = len;
+    s_seq_idx = 0;
+    s_alarm_busy = (len > 1);
+    buzz_note_start(&seq[0]);
+    return ESP_OK;
+}
+
+esp_err_t waveshare_buzzer_alarm(buzz_alarm_t level)
+{
+    switch (level) {
+    case BUZZ_CRITICAL: return buzz_play(k_critical, sizeof(k_critical) / sizeof(k_critical[0]));
+    case BUZZ_FAILURE:  return buzz_play(k_failure,  sizeof(k_failure)  / sizeof(k_failure[0]));
+    default:            return buzz_play(k_warning,  sizeof(k_warning)  / sizeof(k_warning[0]));
+    }
+}
+
+esp_err_t waveshare_buzzer_click(void)
+{
+    if (s_alarm_busy) return ESP_OK;                   /* never cut an alarm short */
+    return buzz_play(k_click, 1);
+}
+#else
+esp_err_t waveshare_buzzer_alarm(buzz_alarm_t level)
+{
+    (void)level;
+    return ESP_OK;   // no buzzer on the Waveshare board
+}
+
+esp_err_t waveshare_buzzer_click(void)
+{
+    return ESP_OK;   // no buzzer on the Waveshare board
+}
+#endif
+
+/******************************* I2C diagnostics (debug-port "SC") *****************/
+void waveshare_i2c_diag(void)
+{
+    if (!i2c_bus) { ESP_LOGW(TAG, "[DIAG] no I2C bus"); return; }
+
+    ESP_LOGI(TAG, "[DIAG] I2C scan:");
+    for (uint8_t a = 0x08; a <= 0x77; a++) {
+        if (i2c_master_probe(i2c_bus, a, 50) == ESP_OK)
+            ESP_LOGI(TAG, "[DIAG]   device @ 0x%02X", a);
+    }
+
+#if BOARD_CP_DISPLAY
+    // Read back all four PCA9554 registers (0=input, 1=output, 2=polarity,
+    // 3=config). Input reg shows the REAL pin levels.
+    i2c_device_config_t cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address  = EXP_PCA9554_ADDR,
+        .scl_speed_hz    = I2C_MASTER_FREQ_HZ,
+    };
+    i2c_master_dev_handle_t dev;
+    if (i2c_master_bus_add_device(i2c_bus, &cfg, &dev) == ESP_OK) {
+        for (uint8_t r = 0; r < 4; r++) {
+            uint8_t v = 0;
+            esp_err_t err = i2c_master_transmit_receive(dev, &r, 1, &v, 1,
+                                                        I2C_MASTER_TIMEOUT_MS);
+            if (err == ESP_OK)
+                ESP_LOGI(TAG, "[DIAG] PCA9554 reg%u = 0x%02X", r, v);
+            else
+                ESP_LOGW(TAG, "[DIAG] PCA9554 reg%u read FAILED: %s",
+                         r, esp_err_to_name(err));
+        }
+        i2c_master_bus_rm_device(dev);
+    }
+    ESP_LOGI(TAG, "[DIAG] expander shadow = 0x%02X (TP_RST=%d DISP=%d LCD_RST=%d "
+             "SDCS=%d BUZZ=%d BL=%d CAN_S=%d)",
+             s_exp_shadow,
+             !!(s_exp_shadow & EXP_TP_RST), !!(s_exp_shadow & EXP_DISP),
+             !!(s_exp_shadow & EXP_LCD_RST), !!(s_exp_shadow & EXP_SDCS),
+             !!(s_exp_shadow & EXP_BUZZ_ON), !!(s_exp_shadow & EXP_BL_ON),
+             !!(s_exp_shadow & EXP_CAN_S));
+#endif
+
+    /* Bus-health stress test with REAL transactions. i2c_master_probe() is not
+     * a reliable health gauge: it always runs at 100 kHz and reports "found"
+     * for any status other than an explicit NACK/timeout. Each target is read
+     * N times at I2C_MASTER_FREQ_HZ; the first good value is the reference. */
+    static const struct { uint8_t addr; uint8_t reg[2]; uint8_t reg_len; const char *name; } tgt[] = {
+#if BOARD_CP_DISPLAY
+        { EXP_PCA9554_ADDR, { 0x01 },       1, "PCA9554 out" },
+#endif
+        { 0x51,             { 0x00 },       1, "RTC ctrl1"   },
+        { 0x5D,             { 0x81, 0x40 }, 2, "GT911 id"    },
+        { 0x30,             { 0x00 },       1, "empty 0x30"  },   /* must NACK */
+    };
+    const int N = 200;
+    esp_log_level_set("i2c.master", ESP_LOG_NONE);   /* NACKs would flood the log */
+    for (size_t t = 0; t < sizeof(tgt) / sizeof(tgt[0]); t++) {
+        i2c_device_config_t dc = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address  = tgt[t].addr,
+            .scl_speed_hz    = I2C_MASTER_FREQ_HZ,
+        };
+        i2c_master_dev_handle_t d;
+        if (i2c_master_bus_add_device(i2c_bus, &dc, &d) != ESP_OK) continue;
+        int ok = 0, nack = 0, other = 0, mismatch = 0;
+        int ref = -1;
+        for (int i = 0; i < N; i++) {
+            uint8_t v = 0;
+            esp_err_t e = i2c_master_transmit_receive(d, tgt[t].reg, tgt[t].reg_len,
+                                                      &v, 1, 50);
+            if (e == ESP_OK) {
+                ok++;
+                if (ref < 0) ref = v;
+                else if (v != ref) mismatch++;
+            } else if (e == ESP_ERR_NOT_FOUND || e == ESP_ERR_INVALID_STATE) {
+                nack++;
+            } else {
+                other++;
+            }
+        }
+        i2c_master_bus_rm_device(d);
+        ESP_LOGI(TAG, "[DIAG] stress %-12s @0x%02X: ok=%d nack=%d err=%d mismatch=%d ref=0x%02X",
+                 tgt[t].name, tgt[t].addr, ok, nack, other, mismatch, ref < 0 ? 0 : ref);
+    }
+    esp_log_level_set("i2c.master", ESP_LOG_INFO);
+    ESP_LOGI(TAG, "[DIAG] bus speed %d Hz, N=%d per target", I2C_MASTER_FREQ_HZ, N);
 }
 
 /******************************* Direct touch poll (for sleep mode) ****************/

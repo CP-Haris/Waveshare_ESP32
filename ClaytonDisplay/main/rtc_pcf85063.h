@@ -37,6 +37,20 @@ esp_err_t rtc_pcf85063_set_time(const struct tm *t);
 esp_err_t rtc_pcf85063_set_datetime(int year, int month, int day,
                                     int hour, int min, int sec);
 
+/**
+ * CLKOUT pin control. On the Clayton "New Display" PCB the RTC's CLKOUT
+ * drives the buzzer, so the tone is made by enabling a 4096 Hz square wave
+ * and gating it with the expander's BUZZ_ON bit. Off = COF disabled (also
+ * the recommended idle state — the power-on default is 32768 Hz).
+ */
+esp_err_t rtc_pcf85063_clkout_enable(bool on);
+
+/**
+ * CLKOUT at a specific frequency: 1024, 2048, 4096, 8192, 16384 or 32768 Hz;
+ * 0 = off. Other values return ESP_ERR_INVALID_ARG.
+ */
+esp_err_t rtc_pcf85063_clkout_set_hz(uint32_t hz);
+
 #ifdef __cplusplus
 }
 #endif

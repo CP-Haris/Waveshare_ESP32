@@ -3,16 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   Platform,
   PermissionsAndroid,
+  Linking,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, fontSize, radius } from '../utils/theme';
+import StatusBar from '../components/StatusBar';
+import CarbonIcon from '../components/CarbonIcon';
+import { Button, Notice, ScreenTitle, Section } from '../components/Carbon';
+import { colors, font, spacing, type } from '../utils/theme';
 import bleService from '../services/bleService';
-import ScreenHeader from '../components/ScreenHeader';
 
 async function requestPermissions() {
   if (Platform.OS === 'android') {
@@ -26,6 +26,21 @@ async function requestPermissions() {
     );
   }
   return true;
+}
+
+// RSSI as four ascending bars (spec §10): lit bars in ink, the rest track.
+function SignalBars({ rssi }) {
+  const lit = rssi > -60 ? 4 : rssi > -70 ? 3 : rssi > -80 ? 2 : 1;
+  return (
+    <View style={styles.bars}>
+      {[0, 1, 2, 3].map((i) => (
+        <View
+          key={i}
+          style={[styles.bar, { height: 5 + i * 3, backgroundColor: i < lit ? colors.ink : colors.track }]}
+        />
+      ))}
+    </View>
+  );
 }
 
 export default function ConnectScreen() {
@@ -59,264 +74,155 @@ export default function ConnectScreen() {
     setConnectError(null);
     const ok = await bleService.connect(deviceId);
     if (!ok) {
-      setConnectError('Pairing failed. Enter the BLE PIN shown on the display when Android asks for it.');
+      setConnectError(
+        'Could not connect. If the PIN was entered correctly, the display may have forgotten this '
+        + 'phone: remove "Clayton Power" in Bluetooth settings and connect again.'
+      );
     }
     setConnecting(null);
   };
 
   const isDeviceConnected = (id) => connected && bleService.device?.id === id;
 
-  const renderDevice = ({ item }) => {
+  const renderDevice = ({ item, index }) => {
     const isConn = isDeviceConnected(item.id);
-    const signalStrong = item.rssi > -65;
-    const signalMed = item.rssi > -78;
-    const signalLabel = signalStrong ? 'Strong' : signalMed ? 'Medium' : 'Weak';
-    const signalColor = signalStrong ? colors.green : signalMed ? colors.solar : colors.red;
-
     return (
-      <View style={styles.deviceCard}>
-        <View style={styles.deviceRow}>
-          <View style={styles.deviceIconCircle}>
-            <MaterialIcons name="bluetooth" size={22} color={isConn ? colors.accent : colors.textMuted} />
-          </View>
-          <View style={styles.deviceInfo}>
-            <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
-            <View style={styles.signalRow}>
-              <MaterialIcons
-                name={signalStrong ? 'signal-cellular-alt' : signalMed ? 'signal-cellular-connected-no-internet-4-bar' : 'signal-cellular-0-bar'}
-                size={14}
-                color={signalColor}
-              />
-              <Text style={styles.signalText}>Signal: {signalLabel}, RSSI {item.rssi}dBm</Text>
-            </View>
+      <View style={[styles.deviceRow, index === devices.length - 1 && styles.deviceRowLast]}>
+        <CarbonIcon name="bt" size={24} color={isConn ? colors.blue : colors.dim} />
+        <View style={styles.deviceInfo}>
+          <Text style={type.label} numberOfLines={1}>{item.name || 'Unknown device'}</Text>
+          <View style={styles.signalRow}>
+            <SignalBars rssi={item.rssi} />
+            <Text style={type.small}>{item.rssi} dBm</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.actionBtn, isConn ? styles.disconnectBtnStyle : styles.connectBtnStyle]}
-          onPress={() => isConn ? bleService.disconnect() : connectDevice(item.id)}
+        <Button
+          compact
+          label={isConn ? 'DISCONNECT' : 'CONNECT'}
+          variant={isConn ? 'outline' : 'primary'}
+          loading={connecting === item.id}
           disabled={connecting !== null && !isConn}
-        >
-          {connecting === item.id ? (
-            <ActivityIndicator color={colors.text} size="small" />
-          ) : (
-            <Text style={[styles.actionBtnText, !isConn && styles.connectText]}>
-              {isConn ? 'DISCONNECT' : 'CONNECT'}
-            </Text>
-          )}
-        </TouchableOpacity>
+          onPress={() => (isConn ? bleService.disconnect() : connectDevice(item.id))}
+        />
       </View>
     );
   };
 
   return (
-    <View style={styles.container}>
-      <ScreenHeader />
+    <View style={styles.screen}>
+      <StatusBar />
+      <ScreenTitle title="CONNECT" />
 
-      {connected && (
-        <View style={styles.systemReadyCard}>
-          <View style={styles.btGreenRing}>
-            <MaterialIcons name="bluetooth-connected" size={28} color={colors.green} />
-          </View>
-          <View style={styles.systemReadyInfo}>
-            <Text style={styles.systemReadyTitle}>System Ready</Text>
-            <View style={styles.connectedRow}>
-              <View style={styles.greenDot} />
-              <Text style={styles.connectedLabel}>
-                Connected to {connectedDeviceName || 'LPS BLE'}
-              </Text>
-            </View>
-          </View>
+      <View style={styles.state}>
+        <View style={[styles.stateRing, connected && styles.stateRingOn]}>
+          <CarbonIcon name="bt" size={40} color={connected ? colors.blue : colors.dim} />
         </View>
-      )}
-
-      <View style={styles.sectionRow}>
-        <Text style={styles.sectionLabel}>AVAILABLE DEVICES</Text>
-        <TouchableOpacity onPress={startScan} disabled={scanning} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          {scanning
-            ? <ActivityIndicator size="small" color={colors.accent} />
-            : <MaterialIcons name="radar" size={22} color={colors.textMuted} />
-          }
-        </TouchableOpacity>
-      </View>
-      <View style={styles.sectionDivider} />
-
-      {connectError && (
-        <View style={styles.errorCard}>
-          <MaterialIcons name="lock" size={18} color={colors.red} />
-          <Text style={styles.errorText}>{connectError}</Text>
-        </View>
-      )}
-
-      {devices.length > 0 ? (
-        <FlatList
-          data={devices}
-          keyExtractor={(item) => item.id}
-          renderItem={renderDevice}
-          style={styles.list}
-          contentContainerStyle={{ paddingBottom: spacing.md }}
-        />
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>
-            {scanning ? 'Scanning for devices...' : 'Tap the scan icon above to search for devices'}
+        <View style={styles.stateCopy}>
+          <Text style={[type.value, !connected && styles.dim]} numberOfLines={1}>
+            {connected ? connectedDeviceName || 'LPS BLE' : 'No device'}
+          </Text>
+          <Text style={[styles.stateTag, connected && styles.stateTagOn]}>
+            {connected ? 'CONNECTED' : 'NOT CONNECTED'}
           </Text>
         </View>
-      )}
+      </View>
+
+      <Section
+        title="AVAILABLE DEVICES"
+        right={(
+          <Button
+            compact
+            label={scanning ? 'SCANNING' : 'SCAN'}
+            icon={scanning ? undefined : 'scan'}
+            loading={scanning}
+            onPress={startScan}
+          />
+        )}
+        style={styles.flex}
+      >
+        {connecting !== null && (
+          <Notice color={colors.blue} text="If Android asks for a PIN, enter the 6-digit code shown on the display." />
+        )}
+        {connectError && (
+          <>
+            <Notice text={connectError} />
+            {Platform.OS === 'android' && (
+              <Button
+                compact
+                label="BLUETOOTH SETTINGS"
+                icon="bt"
+                onPress={() => Linking.sendIntent('android.settings.BLUETOOTH_SETTINGS').catch(() => Linking.openSettings())}
+                style={styles.settingsBtn}
+              />
+            )}
+          </>
+        )}
+
+        {devices.length > 0 ? (
+          <FlatList
+            data={devices}
+            keyExtractor={(item) => item.id}
+            renderItem={renderDevice}
+            style={styles.flex}
+            contentContainerStyle={{ paddingBottom: spacing.md }}
+          />
+        ) : (
+          <View style={styles.empty}>
+            <CarbonIcon name="scan" size={40} color={colors.faint} />
+            <Text style={[type.small, styles.emptyText]}>
+              {scanning ? 'Searching for Clayton Power units…' : 'Tap SCAN to search for nearby units'}
+            </Text>
+          </View>
+        )}
+      </Section>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+  dim: { color: colors.dim },
+
+  state: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
   },
-  systemReadyCard: {
-    backgroundColor: colors.greenBg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.greenBorder,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  btGreenRing: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 2,
-    borderColor: colors.green,
+  stateRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.greenDeep,
-    marginRight: spacing.md,
-  },
-  systemReadyInfo: { flex: 1 },
-  systemReadyTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  connectedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 6,
-  },
-  greenDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.green,
-  },
-  connectedLabel: {
-    color: colors.textDim,
-    fontSize: fontSize.sm,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  sectionLabel: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  sectionDivider: {
-    height: 1,
-    backgroundColor: colors.borderSubtle,
-    marginBottom: spacing.sm,
-  },
-  errorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.redBg,
+    backgroundColor: colors.panel,
     borderWidth: 1,
-    borderColor: colors.red,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    borderColor: colors.edge,
   },
-  errorText: {
-    flex: 1,
-    color: colors.text,
-    fontSize: fontSize.sm,
-  },
-  list: { flex: 1 },
-  deviceCard: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
-  },
+  stateRingOn: { borderColor: colors.blue },
+  stateCopy: { flex: 1, minWidth: 0, gap: 4 },
+  stateTag: { fontFamily: font.bold, fontSize: 13, letterSpacing: 2, color: colors.dim },
+  stateTagOn: { color: colors.blue },
+
   deviceRow: {
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.rowLine,
   },
-  deviceIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.bgInset,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deviceInfo: { flex: 1 },
-  deviceName: {
-    color: colors.text,
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-  },
-  signalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 3,
-  },
-  signalText: {
-    color: colors.textMuted,
-    fontSize: fontSize.sm,
-  },
-  actionBtn: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderRadius: radius.sm,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  connectBtnStyle: { backgroundColor: colors.accent },
-  disconnectBtnStyle: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  actionBtnText: {
-    color: colors.textDim,
-    fontWeight: '800',
-    fontSize: fontSize.sm,
-    letterSpacing: 1,
-  },
-  connectText: { color: colors.text },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-  },
-  emptyText: {
-    color: colors.textFaint,
-    fontSize: fontSize.sm,
-    textAlign: 'center',
-  },
+  deviceRowLast: { borderBottomWidth: 0 },
+  deviceInfo: { flex: 1, minWidth: 0 },
+  signalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 14 },
+  bar: { width: 3 },
+
+  settingsBtn: { alignSelf: 'flex-start', marginBottom: spacing.sm },
+  empty: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl * 2 },
+  emptyText: { textAlign: 'center' },
 });

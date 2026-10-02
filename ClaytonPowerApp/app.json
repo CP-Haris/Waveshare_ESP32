@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0d1117"
+      "backgroundColor": "#0B0C0E"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,7 +22,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0B0C0E"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
@@ -41,6 +41,10 @@
         "projectId": "32f57c39-a7ba-4ba0-b7ba-c46b55870c6b"
       }
     },
-    "owner": "cp_haris"
+    "owner": "cp_haris",
+    "plugins": [
+      "expo-font"
+    ],
+    "backgroundColor": "#0B0C0E"
   }
 }

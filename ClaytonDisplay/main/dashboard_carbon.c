@@ -49,8 +49,9 @@ extern const lv_img_dsc_t cb_ic_plug, cb_ic_car, cb_ic_sun, cb_ic_socket, cb_ic_
 /*==========================================================================
  *  Palette (Carbon Blue tokens — see design spec §2)
  *========================================================================*/
-#define CB_BG       lv_color_hex(0x141518)   /* graphite ground             */
-#define CB_PANEL    lv_color_hex(0x101113)   /* plates: buttons, popups     */
+#define CB_BG       lv_color_hex(0x0B0C0E)   /* near-black ground           */
+#define CB_PANEL    lv_color_hex(0x26292E)   /* grey plates: buttons, popups */
+#define CB_PANEL_PR lv_color_hex(0x34383F)   /* plate while pressed         */
 #define CB_LINE     lv_color_hex(0x26282C)   /* hairline dividers           */
 #define CB_TRACK    lv_color_hex(0x1F2125)   /* empty arc/track             */
 #define CB_INK      lv_color_hex(0xEFEDE8)   /* text, arcs, chevrons        */
@@ -60,7 +61,7 @@ extern const lv_img_dsc_t cb_ic_plug, cb_ic_car, cb_ic_sun, cb_ic_socket, cb_ic_
 #define CB_BLUE_DIM lv_color_hex(0x2F5F8C)   /* prognosis projection line   */
 #define CB_YELLOW   lv_color_hex(0xE6C84A)   /* overload / warning          */
 #define CB_RED      lv_color_hex(0xE25454)   /* blocked / fault / critical  */
-#define CB_BTN_EDGE lv_color_hex(0x33373D)   /* circular button border      */
+#define CB_BTN_EDGE lv_color_hex(0x3E434A)   /* circular button border      */
 
 /*==========================================================================
  *  Capacities the dial arcs measure against (design spec §12 — adjust to
@@ -648,7 +649,7 @@ void dashboard_ui_create(lv_obj_t *parent, const dashboard_callbacks_t *cb)
         lv_obj_set_style_border_width(btn, 1, 0);
         lv_obj_set_style_border_color(btn, CB_BTN_EDGE, 0);
         lv_obj_set_style_shadow_width(btn, 0, 0);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0x1A1C1F), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(btn, CB_PANEL_PR, LV_STATE_PRESSED);
         lv_obj_add_event_cb(btn, dis_cb[i], LV_EVENT_CLICKED, NULL);
 
         g_dd_arc[i] = make_dial_arc(btn, DIAL_SIZE);

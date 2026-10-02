@@ -19,9 +19,20 @@ static const char *TAG = "rtc";
 
 #define PCF85063_ADDR      0x51
 #define REG_CONTROL_1      0x00
+#define REG_CONTROL_2      0x01
 #define REG_SECONDS        0x04
 #define SECONDS_OS_BIT     0x80
 #define I2C_TIMEOUT_MS     100
+
+/* Control_2 COF[2:0]: 000 = 32768 Hz ... 011 = 4096, 100 = 2048, 101 = 1024,
+ * 110 = 1 Hz, 111 = CLKOUT off */
+#define COF_32768HZ        0x00
+#define COF_16384HZ        0x01
+#define COF_8192HZ         0x02
+#define COF_4096HZ         0x03
+#define COF_2048HZ         0x04
+#define COF_1024HZ         0x05
+#define COF_OFF            0x07
 
 static i2c_master_dev_handle_t s_dev = NULL;
 
@@ -35,7 +46,7 @@ esp_err_t rtc_pcf85063_init(i2c_master_bus_handle_t bus)
     i2c_device_config_t cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address  = PCF85063_ADDR,
-        .scl_speed_hz    = 400000,
+        .scl_speed_hz    = 100000,   /* match I2C_MASTER_FREQ_HZ */
     };
     esp_err_t err = i2c_master_bus_add_device(bus, &cfg, &s_dev);
     if (err != ESP_OK) {
@@ -49,7 +60,35 @@ esp_err_t rtc_pcf85063_init(i2c_master_bus_handle_t bus)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "PCF85063 not responding: %s", esp_err_to_name(err));
     }
+
+    // CLKOUT off (power-on default is 32768 Hz). On the CP board CLKOUT
+    // feeds the buzzer amp, so it must idle silent; on the Waveshare board
+    // the pin is unused and this just saves a little power.
+    rtc_pcf85063_clkout_enable(false);
     return err;
+}
+
+esp_err_t rtc_pcf85063_clkout_set_hz(uint32_t hz)
+{
+    if (!s_dev) return ESP_ERR_INVALID_STATE;
+    uint8_t cof;
+    switch (hz) {
+    case 0:     cof = COF_OFF;     break;
+    case 1024:  cof = COF_1024HZ;  break;
+    case 2048:  cof = COF_2048HZ;  break;
+    case 4096:  cof = COF_4096HZ;  break;
+    case 8192:  cof = COF_8192HZ;  break;
+    case 16384: cof = COF_16384HZ; break;
+    case 32768: cof = COF_32768HZ; break;
+    default:    return ESP_ERR_INVALID_ARG;
+    }
+    uint8_t buf[2] = { REG_CONTROL_2, cof };
+    return i2c_master_transmit(s_dev, buf, sizeof(buf), I2C_TIMEOUT_MS);
+}
+
+esp_err_t rtc_pcf85063_clkout_enable(bool on)
+{
+    return rtc_pcf85063_clkout_set_hz(on ? 4096 : 0);
 }
 
 bool rtc_pcf85063_get_time(struct tm *out)

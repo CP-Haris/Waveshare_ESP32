@@ -1,565 +1,227 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Modal,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, fontSize } from '../utils/theme';
-import { ERROR_LEVEL, activeErrorDefinitions } from '../utils/errorCodes';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import StatusBar from '../components/StatusBar';
+import CarbonIcon from '../components/CarbonIcon';
+import Dial, { dialState } from '../components/Dial';
+import Chevrons from '../components/Chevrons';
+import ForecastChart from '../components/ForecastChart';
+import { Button } from '../components/Carbon';
+import { colors, font, spacing, type } from '../utils/theme';
 import { unitFamily } from '../utils/units';
+import { recordSoc } from '../services/socHistory';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
-import ScreenHeader from '../components/ScreenHeader';
-import SocRing from '../components/SocRing';
 
-const FAIL_LABELS = {
-  4: 'Blocked by error',
-};
+// Gauge full scale until CAN-provided maxima are wired in — same fallbacks
+// as the firmware's CAP_* defines (spec §6.2).
+const CAP = { acIn: 2000, dcIn: 1000, solar: 800, acOut: 3000, dcOut: 1200 };
 
-function finiteNumber(value, fallback = 0) {
-  return Number.isFinite(value) ? value : fallback;
+const MARGIN = spacing.md;
+const MIN_CHART_H = 110;
+
+function finite(value) {
+  return Number.isFinite(value) ? value : 0;
 }
 
-function formatPower(watts) {
-  const value = finiteNumber(watts);
-  const absValue = Math.abs(value);
-  if (absValue >= 1000) {
-    return { value: (value / 1000).toFixed(absValue >= 10000 ? 0 : 1), unit: 'kW' };
-  }
-  return { value: String(Math.round(value)), unit: 'W' };
+function hhmm(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-function formatFixed(value, decimals) {
-  return finiteNumber(value).toFixed(decimals);
-}
-
-function stateLabel(state, failCode) {
-  if (failCode > 0) return FAIL_LABELS[failCode] || `Failure ${failCode}`;
-  switch (state) {
-    case -1: return 'Error';
-    case 0: return 'Off';
-    case 1: return 'On';
-    case 2: return 'Standby';
-    case 3: return 'Charge';
-    case 4: return 'Float';
-    default: return 'Idle';
-  }
-}
-
-function errorLevelColor(level) {
-  if (level === ERROR_LEVEL.WARNING) return colors.solar;
-  if (level === ERROR_LEVEL.FAILURE || level === ERROR_LEVEL.CRITICAL) return colors.red;
-  return colors.textMuted;
-}
-
-function SystemMetricCard({ icon, label, value, unit, detail, active, fail, stateText, accentColor = colors.accent, wide = false }) {
-  const stateColor = fail ? colors.red : active ? accentColor : colors.textMuted;
-
-  return (
-    <View style={[styles.systemMetricCard, wide && styles.systemMetricCardWide]}>
-      <View style={styles.systemMetricTopRow}>
-        <View style={[styles.systemMetricIcon, { borderColor: accentColor }]}>
-          <MaterialIcons name={icon} size={18} color={accentColor} />
-        </View>
-        <View style={styles.systemMetricHeaderCopy}>
-          <Text style={styles.systemMetricLabel}>{label}</Text>
-          <View style={styles.systemMetricStateRow}>
-            <View style={[styles.systemDot, { backgroundColor: stateColor }]} />
-            <Text style={[styles.systemMetricState, { color: stateColor }]}>{stateText}</Text>
-          </View>
-        </View>
+/** Forecast (spec §6), stacked beside the SoC: "FULL AT 18:01" / "IN 3H 13M". */
+function ForecastLine({ charging, discharging, minutesLeft }) {
+  if ((charging || discharging) && minutesLeft > 0) {
+    const at = hhmm(new Date(Date.now() + minutesLeft * 60000));
+    const h = Math.floor(minutesLeft / 60);
+    const m = String(minutesLeft % 60).padStart(2, '0');
+    return (
+      <View style={styles.forecast}>
+        <Text style={styles.untilKey}>{charging ? 'FULL' : 'EMPTY'} AT {at}</Text>
+        <Text style={styles.until}>IN {h}H {m}M</Text>
       </View>
-      <Text style={styles.systemMetricValue}>
-        {value} <Text style={styles.systemMetricUnit}>{unit}</Text>
+    );
+  }
+  return (
+    <View style={styles.forecast}>
+      <Text style={charging ? styles.untilKey : styles.until}>
+        {charging ? 'CHARGING' : discharging ? 'DISCHARGING' : 'STANDBY'}
       </Text>
-      {!!detail && <Text style={styles.systemMetricDetail}>{detail}</Text>}
     </View>
   );
 }
 
-function ToggleControl({ icon, label, value, onValueChange }) {
+function ZoneHead({ title, total, dirIn, active }) {
   return (
-    <View style={[styles.controlCard, value && styles.controlCardActive]}>
-      <View style={styles.controlTextRow}>
-        <View style={[styles.controlIcon, value && styles.controlIconActive]}>
-          <MaterialIcons name={icon} size={18} color={value ? colors.green : colors.textMuted} />
-        </View>
-        <View style={styles.controlCopy}>
-          <Text style={styles.controlLabel}>{label}</Text>
-          <Text style={[styles.controlState, value && styles.controlStateActive]}>{value ? 'On' : 'Off'}</Text>
-        </View>
+    <View style={styles.zoneHead}>
+      <View style={styles.zoneTitle}>
+        <Text style={type.zone}>{title}</Text>
+        <Chevrons dirIn={dirIn} visible={active} />
       </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: colors.borderInput, true: colors.greenBg }}
-        thumbColor={value ? colors.green : colors.textMuted}
-      />
+      <View style={styles.total}>
+        <Text style={[type.total, !active && styles.dim]}>{Math.round(total)}</Text>
+        <Text style={styles.totalUnit}>W</Text>
+      </View>
     </View>
   );
 }
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }) {
+  const { width } = useWindowDimensions();
+  const [bodyHeight, setBodyHeight] = useState(0);
   const [data, setData] = useState(null);
+  const [history, setHistory] = useState([]);
   const [connected, setConnected] = useState(bleService.isConnected);
-  const [errorOverviewVisible, setErrorOverviewVisible] = useState(false);
-  const [clearingErrors, setClearingErrors] = useState(false);
-  const [clearStatus, setClearStatus] = useState('');
-  const pollRef = useRef(null);
 
   useEffect(() => {
-    const startPolling = () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (bleService.isConnected) {
-        canGatewayService.requestUnits();
-        canGatewayService.requestDashboard();
-        pollRef.current = setInterval(() => {
-          if (bleService.isConnected) canGatewayService.requestDashboard();
-        }, 2000);
-      }
-    };
-
     const unsubData = canGatewayService.onNotification((msg) => {
-      if (msg.type === 'dashboard') setData(msg.data);
+      if (msg.type !== 'dashboard') return;
+      const soc = Math.max(0, Math.min(100, Math.round(finite(msg.data.soc))));
+      const unitKey = msg.data.serial || msg.data.partNumber || 'unit';
+      setHistory(recordSoc(unitKey, soc));
+      setData(msg.data);
     });
-
     const unsubConn = bleService.onConnectionChange((c) => {
       setConnected(c);
-      if (c) startPolling();
-      else {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      if (!c) setData(null);
     });
-
-    if (bleService.isConnected) startPolling();
-
+    if (bleService.isConnected) canGatewayService.requestDashboard();
     return () => {
       unsubData();
       unsubConn();
-      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
 
-  if (!connected) {
+  if (!connected || !data) {
     return (
-      <View style={styles.center}>
-        <MaterialIcons name="bluetooth-disabled" size={42} color={colors.textGhost} />
-        <Text style={styles.centerTitle}>Not Connected</Text>
-        <Text style={styles.centerHint}>Go to Connect tab and pair a device</Text>
+      <View style={styles.screen}>
+        <StatusBar />
+        <View style={styles.center}>
+          <CarbonIcon name="bt" size={48} color={connected ? colors.blue : colors.faint} />
+          <Text style={[type.zone, styles.centerTitle]}>{connected ? 'WAITING FOR DATA' : 'NOT CONNECTED'}</Text>
+          {!connected && (
+            <Button label="CONNECT" variant="primary" onPress={() => navigation.navigate('Connect')} style={styles.centerBtn} />
+          )}
+        </View>
       </View>
     );
   }
 
-  if (!data) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.centerHint}>Waiting for data...</Text>
-      </View>
-    );
-  }
+  const d = data;
+  const isBms = unitFamily({ type: d.unitType, partNumber: d.partNumber }) === 'bms';
+  const soc = Math.max(0, Math.min(100, Math.round(finite(d.soc))));
+  const charging = finite(d.batteryCurrent) > 0.5;
+  const discharging = finite(d.batteryCurrent) < -0.5;
+  const minutesLeft = Math.abs(Math.round(finite(d.socTimeMin)));
 
-  const dashboard = data;
-  const isBatteryProduct = unitFamily({ type: dashboard.unitType, partNumber: dashboard.partNumber }) === 'bms';
-  const pct = Math.max(0, Math.min(100, dashboard.soc));
-  const timeStr = dashboard.socTimeMin > 0
-    ? `${Math.floor(dashboard.socTimeMin / 60)}h ${String(dashboard.socTimeMin % 60).padStart(2, '0')}m`
-    : '--h --m';
-  const inverterOn = dashboard.inverterState >= 1;
-  const dcOutOn = dashboard.dcOutState >= 1;
-  const statusOk = dashboard.errorCount === 0;
-  const batteryPower = dashboard.batteryVoltage * dashboard.batteryCurrent;
-  const dcInPower = dashboard.dcInVoltage * dashboard.dcInCurrent;
-  const dcOutPower = dashboard.dcOutVoltage * dashboard.dcOutCurrent;
-  const batteryPowerText = formatPower(batteryPower);
-  const dcInPowerText = formatPower(dcInPower);
-  const dcOutPowerText = formatPower(dcOutPower);
-  const acInPowerText = formatPower(dashboard.acInPower);
-  const acOutPowerText = formatPower(dashboard.acOutPower);
-  const chargeMode = dashboard.batteryCurrent >= 0 ? 'Charging' : 'Discharging';
-  const healthText = statusOk ? 'Healthy' : 'Attention';
-  const errorDefinitions = activeErrorDefinitions(dashboard.errorCodes);
-  const errorCountLabel = errorDefinitions.length === 1 ? '1 active error' : `${errorDefinitions.length} active errors`;
+  const pAcIn = finite(d.acInPower);
+  const pDcIn = Math.max(0, finite(d.dcInVoltage) * finite(d.dcInCurrent));
+  const pSolar = Math.max(0, finite(d.solarCurrent) * finite(d.batteryVoltage));
+  const pAcOut = finite(d.acOutPower);
+  const pDcOut = Math.max(0, finite(d.dcOutVoltage) * finite(d.dcOutCurrent));
 
-  const openErrorOverview = () => {
-    setClearStatus('');
-    setErrorOverviewVisible(true);
-  };
+  const acIn = dialState(d.chargerState, d.chargerFail, pAcIn, CAP.acIn);
+  const dcIn = dialState(d.dcInState, d.dcInFail, pDcIn, CAP.dcIn);
+  const solar = dialState(d.solarState, d.solarFail, pSolar, CAP.solar);
+  const acOut = dialState(d.inverterState, d.inverterFail, pAcOut, CAP.acOut);
+  const dcOut = dialState(d.dcOutState, d.dcOutFail, pDcOut, CAP.dcOut);
 
-  const handleClearErrors = async () => {
-    if (clearingErrors || errorDefinitions.length === 0) return;
-    setClearingErrors(true);
-    setClearStatus('');
-    try {
-      const ok = await canGatewayService.clearErrors();
-      setClearStatus(ok ? 'Clear command sent' : 'Unable to send clear command');
-      if (ok) {
-        canGatewayService.requestErrors();
-        canGatewayService.requestDashboard();
-      }
-    } catch (error) {
-      setClearStatus('Unable to send clear command');
-    } finally {
-      setClearingErrors(false);
-    }
-  };
+  const shown = (s, p) => (s.state === 'off' || s.state === 'blocked' ? 0 : p);
+  const chgTotal = shown(acIn, pAcIn) + shown(dcIn, pDcIn) + shown(solar, pSolar);
+  const disTotal = (isBms ? 0 : shown(acOut, pAcOut)) + shown(dcOut, pDcOut);
 
-  const batteryCard = {
-    key: 'battery',
-    label: 'Battery',
-    icon: 'battery-full',
-    value: batteryPowerText.value,
-    unit: batteryPowerText.unit,
-    detail: `${formatFixed(dashboard.batteryVoltage, 1)} V | ${formatFixed(dashboard.batteryCurrent, 1)} A`,
-    active: statusOk,
-    fail: !statusOk,
-    stateText: statusOk ? chargeMode : 'Attention',
-    accentColor: dashboard.batteryCurrent >= 0 ? colors.green : colors.orange,
-    wide: true,
-  };
-
-  const systemCards = isBatteryProduct ? [batteryCard] : [
-    {
-      key: 'dcout',
-      label: 'DC Output',
-      icon: 'output',
-      value: dcOutPowerText.value,
-      unit: dcOutPowerText.unit,
-      detail: `${formatFixed(dashboard.dcOutVoltage, 2)} V | ${formatFixed(dashboard.dcOutCurrent, 1)} A`,
-      active: dashboard.dcOutState >= 1 && dashboard.dcOutFail === 0,
-      fail: dashboard.dcOutFail > 0,
-      stateText: stateLabel(dashboard.dcOutState, dashboard.dcOutFail),
-      accentColor: colors.green,
-    },
-    {
-      key: 'dcin',
-      label: 'DC Input',
-      icon: 'input',
-      value: dcInPowerText.value,
-      unit: dcInPowerText.unit,
-      detail: `${formatFixed(dashboard.dcInVoltage, 2)} V | ${formatFixed(dashboard.dcInCurrent, 1)} A`,
-      active: dashboard.dcInState >= 1 && dashboard.dcInFail === 0,
-      fail: dashboard.dcInFail > 0,
-      stateText: stateLabel(dashboard.dcInState, dashboard.dcInFail),
-      accentColor: colors.accent,
-    },
-    {
-      key: 'inverter',
-      label: 'Inverter',
-      icon: 'flash-on',
-      value: acOutPowerText.value,
-      unit: acOutPowerText.unit,
-      detail: `${formatFixed(dashboard.acOutVoltage, 1)} V | ${formatFixed(dashboard.acOutCurrent, 2)} A`,
-      active: dashboard.inverterState >= 1 && dashboard.inverterFail === 0,
-      fail: dashboard.inverterFail > 0,
-      stateText: stateLabel(dashboard.inverterState, dashboard.inverterFail),
-      accentColor: colors.accent,
-    },
-    {
-      key: 'charger',
-      label: 'Charger',
-      icon: 'ev-station',
-      value: acInPowerText.value,
-      unit: acInPowerText.unit,
-      detail: `${formatFixed(dashboard.acInVoltage, 1)} V | ${formatFixed(dashboard.acInCurrent, 2)} A`,
-      active: dashboard.chargerState >= 1 && dashboard.chargerFail === 0,
-      fail: dashboard.chargerFail > 0,
-      stateText: stateLabel(dashboard.chargerState, dashboard.chargerFail),
-      accentColor: colors.green,
-    },
-    {
-      key: 'solar',
-      label: 'Solar',
-      icon: 'wb-sunny',
-      value: formatFixed(dashboard.solarCurrent, 1),
-      unit: 'A',
-      detail: 'Solar charge current',
-      active: dashboard.solarState >= 1 && dashboard.solarFail === 0,
-      fail: dashboard.solarFail > 0,
-      stateText: stateLabel(dashboard.solarState, dashboard.solarFail),
-      accentColor: colors.solar,
-      wide: true,
-    },
-  ];
+  // The dashboard never scrolls. Measure the real space between status bar
+  // and tab bar, give the gauges what is left after the fixed rows plus a
+  // minimum chart height, and let the chart absorb the remainder.
+  const compact = bodyHeight > 0 && bodyHeight < 640;
+  const socH = compact ? 72 : 84;
+  const fixedH = 3 * 24 + 18 + socH + 8 // battery zone: padding, label, SoC
+    + 2 * (44 + 8 + 30)                 // two zone heads + gauge value lines
+    + MIN_CHART_H + 8 + 10;             // chart, its top margin, dividers/rounding
+  const zones = isBms ? 1 : 2;
+  const byHeight = bodyHeight > 0 ? Math.floor((bodyHeight - fixedH) / zones) : 90;
+  const byWidth = Math.floor((width - 2 * MARGIN - 2 * 16) / 3);
+  const dialSize = Math.max(56, Math.min(90, byWidth, byHeight));
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      <ScreenHeader />
-
-      <View style={[styles.heroPanel, statusOk ? styles.heroPanelOk : styles.heroPanelAlert]}>
-        <View style={styles.heroTopRow}>
-          <View>
-            <Text style={styles.overline}>{isBatteryProduct ? 'Battery' : 'LPS'}</Text>
-            <Text style={styles.heroTitle}>{chargeMode}</Text>
-            <Text style={styles.heroSubtitle}>{statusOk ? 'System stable' : 'Attention required'}</Text>
+    <View style={styles.screen}>
+      <StatusBar />
+      <View style={styles.body} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
+        <View style={[styles.zone, styles.batteryZone]}>
+          <Text style={type.zone}>BATTERY</Text>
+          <View style={styles.socRow}>
+            <View style={styles.soc}>
+              <Text style={[type.soc, compact && styles.socCompact]}>{soc}</Text>
+              <Text style={[styles.socUnit, compact && styles.socUnitCompact]}>%</Text>
+            </View>
+            <ForecastLine charging={charging} discharging={discharging} minutesLeft={minutesLeft} />
           </View>
-          <TouchableOpacity
-            style={[styles.healthPill, statusOk ? styles.healthPillOk : styles.healthPillAlert]}
-            onPress={openErrorOverview}
-            activeOpacity={0.85}
-          >
-            <MaterialIcons
-              name={statusOk ? 'check-circle' : 'error-outline'}
-              size={16}
-              color={statusOk ? colors.green : colors.red}
-            />
-            <Text style={[styles.healthText, statusOk ? styles.healthTextOk : styles.healthTextAlert]}>{healthText}</Text>
-          </TouchableOpacity>
+          <ForecastChart
+            history={history}
+            soc={soc}
+            charging={charging}
+            discharging={discharging}
+            minutesLeft={minutesLeft}
+            style={styles.chart}
+          />
         </View>
 
-        <View style={styles.heroBody}>
-          <SocRing pct={pct} size={146} />
-          <View style={styles.heroStats}>
-            <View style={styles.statLine}>
-              <Text style={styles.statLabel}>Time left</Text>
-              <Text style={styles.statValue}>{timeStr}</Text>
+        {!isBms && (
+          <View style={[styles.zone, styles.zoneDivider]}>
+            <ZoneHead title="CHARGING" total={chgTotal} dirIn active={chgTotal > 5} />
+            <View style={styles.dialRow}>
+              <Dial size={dialSize} icon="plug" {...acIn} powerW={pAcIn} />
+              <Dial size={dialSize} icon="car" {...dcIn} powerW={pDcIn} />
+              <Dial size={dialSize} icon="sun" {...solar} powerW={pSolar} />
             </View>
-            <View style={styles.statLine}>
-              <Text style={styles.statLabel}>Battery</Text>
-              <Text style={styles.statValue}>{formatFixed(dashboard.batteryVoltage, 1)} V</Text>
-            </View>
-            <View style={styles.statLine}>
-              <Text style={styles.statLabel}>Current</Text>
-              <Text style={[styles.statValue, dashboard.batteryCurrent >= 0 ? styles.valuePositive : styles.valueWarm]}>
-                {dashboard.batteryCurrent >= 0 ? '+' : ''}{formatFixed(dashboard.batteryCurrent, 1)} A
-              </Text>
-            </View>
-            <View style={[styles.statLine, styles.statLineLast]}>
-              <Text style={styles.statLabel}>Battery power</Text>
-              <Text style={styles.statValue}>{batteryPowerText.value} {batteryPowerText.unit}</Text>
-            </View>
+          </View>
+        )}
+
+        <View style={[styles.zone, styles.zoneDivider]}>
+          <ZoneHead title="DISCHARGING" total={disTotal} dirIn={false} active={disTotal > 5} />
+          {/* Same three-column grid as CHARGING: outputs sit under the outer
+              columns (plug / sun); a BMS shows DC out alone in the middle. */}
+          <View style={styles.dialRow}>
+            {isBms ? <View style={{ width: dialSize }} /> : (
+              <Dial size={dialSize} icon="socket" {...acOut} powerW={pAcOut} onPress={() => canGatewayService.toggleFunc(0)} />
+            )}
+            {isBms ? (
+              <Dial size={dialSize} icon="dc" {...dcOut} powerW={pDcOut} onPress={() => canGatewayService.toggleFunc(1)} />
+            ) : <View style={{ width: dialSize }} />}
+            {isBms ? <View style={{ width: dialSize }} /> : (
+              <Dial size={dialSize} icon="dc" {...dcOut} powerW={pDcOut} onPress={() => canGatewayService.toggleFunc(1)} />
+            )}
           </View>
         </View>
       </View>
-
-      {!isBatteryProduct && (
-        <View style={styles.controlRow}>
-          <ToggleControl icon="power" label="Inverter" value={inverterOn} onValueChange={() => canGatewayService.toggleFunc(0)} />
-          <ToggleControl icon="electrical-services" label="DC output" value={dcOutOn} onValueChange={() => canGatewayService.toggleFunc(1)} />
-        </View>
-      )}
-
-      <View style={styles.systemsPanel}>
-        <View style={styles.panelHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>Systems</Text>
-            <Text style={styles.sectionMeta}>{isBatteryProduct ? 'Battery unit' : 'LPS functions'}</Text>
-          </View>
-          <MaterialIcons name={isBatteryProduct ? 'battery-full' : 'memory'} size={18} color={colors.textMuted} />
-        </View>
-        <View style={styles.systemsGrid}>
-          {systemCards.map((item) => (
-            <SystemMetricCard key={item.key} {...item} />
-          ))}
-        </View>
-      </View>
-
-      <Modal
-        visible={errorOverviewVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setErrorOverviewVisible(false)}
-      >
-        <View style={styles.errorModalBackdrop}>
-          <View style={styles.errorSheet}>
-            <View style={styles.errorSheetHeader}>
-              <View>
-                <Text style={styles.errorSheetTitle}>Errors</Text>
-                <Text style={[styles.errorSheetMeta, statusOk ? styles.errorSheetMetaOk : styles.errorSheetMetaAlert]}>
-                  {statusOk ? 'No active errors' : errorCountLabel}
-                </Text>
-              </View>
-              <TouchableOpacity style={styles.iconButton} onPress={() => setErrorOverviewVisible(false)} activeOpacity={0.85}>
-                <MaterialIcons name="close" size={22} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.errorList} contentContainerStyle={styles.errorListContent}>
-              {errorDefinitions.length === 0 ? (
-                <View style={styles.noErrorPanel}>
-                  <MaterialIcons name="check-circle" size={28} color={colors.green} />
-                  <Text style={styles.noErrorTitle}>No active errors</Text>
-                </View>
-              ) : errorDefinitions.map((definition) => {
-                const levelColor = errorLevelColor(definition.level);
-                return (
-                  <View key={definition.code} style={[styles.errorItem, { borderColor: levelColor }]}>
-                    <View style={styles.errorItemHeader}>
-                      <View style={[styles.errorDot, { backgroundColor: levelColor }]} />
-                      <Text style={styles.errorItemTitle}>{definition.title}</Text>
-                      <View style={[styles.errorLevelPill, { borderColor: levelColor }]}>
-                        <Text style={[styles.errorLevelText, { color: levelColor }]}>{definition.level}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.errorDescription}>{definition.description}</Text>
-                    <Text style={styles.errorCodeText}>Error code: {definition.code}</Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            {!!clearStatus && <Text style={styles.clearStatus}>{clearStatus}</Text>}
-            <TouchableOpacity
-              style={[styles.clearButton, errorDefinitions.length === 0 && styles.clearButtonDisabled]}
-              onPress={handleClearErrors}
-              disabled={clearingErrors || errorDefinitions.length === 0}
-              activeOpacity={0.85}
-            >
-              {clearingErrors ? (
-                <ActivityIndicator size="small" color={colors.text} />
-              ) : (
-                <MaterialIcons name="delete-outline" size={18} color={colors.text} />
-              )}
-              <Text style={styles.clearButtonText}>Clear errors</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <View style={{ height: spacing.lg }} />
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.md },
-  center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  centerTitle: { color: colors.text, fontSize: fontSize.xl, fontWeight: '800', marginTop: spacing.md },
-  centerHint: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 6 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  body: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
+  centerTitle: { color: colors.dim },
+  centerBtn: { marginTop: spacing.sm, minWidth: 200 },
 
-  heroPanel: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  heroPanelOk: { borderColor: colors.greenBorder },
-  heroPanelAlert: { borderColor: colors.redBg },
-  heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
-  overline: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700' },
-  heroTitle: { color: colors.text, fontSize: 28, fontWeight: '800', lineHeight: 34, marginTop: 2 },
-  heroSubtitle: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
-  healthPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  healthPillOk: { backgroundColor: colors.greenDeep, borderColor: colors.greenBorder },
-  healthPillAlert: { backgroundColor: colors.redDeep, borderColor: colors.redBg },
-  healthText: { fontSize: fontSize.sm, fontWeight: '700' },
-  healthTextOk: { color: colors.green },
-  healthTextAlert: { color: colors.red },
-  heroBody: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
-  heroStats: { flex: 1 },
-  statLine: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  statLineLast: { borderBottomWidth: 0 },
-  statLabel: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700' },
-  statValue: { color: colors.text, fontSize: fontSize.md, fontWeight: '800', marginTop: 2 },
-  valuePositive: { color: colors.green },
-  valueWarm: { color: colors.orange },
+  zone: { paddingHorizontal: MARGIN, paddingTop: 12, paddingBottom: 12 },
+  batteryZone: { flex: 1 },
+  chart: { flex: 1, marginTop: spacing.sm },
+  zoneDivider: { borderTopWidth: 1, borderTopColor: colors.line },
 
-  controlRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.md },
-  controlCard: {
-    width: '48.5%',
-    backgroundColor: colors.bgElevated,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
-    minHeight: 74,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  controlCardActive: { borderColor: colors.greenBorder, backgroundColor: colors.greenDeep },
-  controlTextRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  controlIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  controlIconActive: { borderColor: colors.greenBorder, backgroundColor: colors.greenBg },
-  controlCopy: { flex: 1 },
-  controlLabel: { color: colors.text, fontSize: fontSize.sm, fontWeight: '800' },
-  controlState: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2, fontWeight: '700' },
-  controlStateActive: { color: colors.green },
+  socRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  soc: { flexDirection: 'row', alignItems: 'flex-end' },
+  socCompact: { fontSize: 72, lineHeight: 72 },
+  socUnit: { fontFamily: font.semibold, fontSize: 42, lineHeight: 42, color: colors.dim, marginLeft: 3, marginBottom: 8 },
+  socUnitCompact: { fontSize: 36, lineHeight: 36, marginBottom: 6 },
+  forecast: { alignItems: 'flex-end', paddingBottom: 12, gap: 2 },
+  until: { fontFamily: font.semibold, fontSize: 14, letterSpacing: 0.6, color: colors.soft },
+  untilKey: { fontFamily: font.bold, fontSize: 16, letterSpacing: 0.6, color: colors.blue },
 
-  sectionTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800' },
-  sectionMeta: { color: colors.textMuted, fontSize: fontSize.xs, fontWeight: '700' },
+  zoneHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  zoneTitle: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4 },
+  total: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  totalUnit: { fontFamily: font.semibold, fontSize: 14, color: colors.dim, marginTop: 5 },
+  dim: { color: colors.dim },
 
-  systemsPanel: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  systemsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  systemMetricCard: {
-    width: '48.5%',
-    minHeight: 122,
-    backgroundColor: colors.bgCard,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  systemMetricCardWide: { width: '100%' },
-  systemMetricTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  systemMetricIcon: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
-  systemMetricHeaderCopy: { flex: 1, minWidth: 0 },
-  systemMetricLabel: { color: colors.text, fontSize: fontSize.sm, fontWeight: '800' },
-  systemMetricStateRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  systemDot: { width: 8, height: 8, borderRadius: 4 },
-  systemMetricState: { fontSize: fontSize.xs, fontWeight: '800' },
-  systemMetricValue: { color: colors.text, fontSize: 24, fontWeight: '800', lineHeight: 30 },
-  systemMetricUnit: { fontSize: 13, color: colors.textMuted, fontWeight: '700' },
-  systemMetricDetail: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 4, fontWeight: '700' },
-
-  errorModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent: 'center',
-    padding: spacing.md,
-  },
-  errorSheet: {
-    maxHeight: '86%',
-    backgroundColor: colors.bgElevated,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  errorSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginBottom: spacing.md },
-  errorSheetTitle: { color: colors.text, fontSize: fontSize.xl, fontWeight: '800' },
-  errorSheetMeta: { fontSize: fontSize.sm, fontWeight: '800', marginTop: 3 },
-  errorSheetMetaOk: { color: colors.green },
-  errorSheetMetaAlert: { color: colors.red },
-  iconButton: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle },
-  errorList: { maxHeight: 430 },
-  errorListContent: { paddingBottom: spacing.sm },
-  noErrorPanel: { minHeight: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: colors.greenDeep, borderWidth: 1, borderColor: colors.greenBorder },
-  noErrorTitle: { color: colors.green, fontSize: fontSize.md, fontWeight: '800', marginTop: spacing.sm },
-  errorItem: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  errorItemHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  errorDot: { width: 10, height: 10, borderRadius: 5 },
-  errorItemTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '800', flex: 1 },
-  errorLevelPill: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
-  errorLevelText: { fontSize: fontSize.xs, fontWeight: '800' },
-  errorDescription: { color: colors.textLight, fontSize: fontSize.sm, lineHeight: 18 },
-  errorCodeText: { color: colors.textFaint, fontSize: fontSize.xs, fontWeight: '700', marginTop: spacing.sm },
-  clearStatus: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.sm, textAlign: 'center' },
-  clearButton: { height: 48, borderRadius: 8, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  clearButtonDisabled: { backgroundColor: colors.bgInset },
-  clearButtonText: { color: colors.text, fontSize: fontSize.md, fontWeight: '800' },
+  dialRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
 });

@@ -49,18 +49,24 @@ ClaytonPowerApp/
 │   │   ├── SettingsScreen.js     # CAN_Extra configuration editor
 │   │   └── FirmwareUpdateScreen.js # CAN bootloader update flow
 │   ├── components/
-│   │   ├── ScreenHeader.js       # Shared title/header row
+│   │   ├── StatusBar.js          # Shared status line (errors, BLE, unit chip, clock)
 │   │   ├── UnitSwitcher.js       # Global active unit selector
-│   │   └── SocRing.js            # Dashboard SOC ring
+│   │   ├── ErrorCenter.js        # Error list sheet + auto popup
+│   │   ├── Carbon.js             # Shared primitives (title bar, rows, buttons, sheet)
+│   │   ├── CarbonIcon.js         # Carbon Blue pictograms (SVG)
+│   │   ├── Dial.js               # 270° gauge + round button plate
+│   │   ├── ForecastChart.js      # SoC history + projection chart
+│   │   └── Chevrons.js           # Marching flow chevrons
 │   ├── services/
 │   │   ├── bleService.js         # BLE singleton (scan, connect, notify)
 │   │   ├── canGatewayService.js  # App-side raw CAN parser and sender
 │   │   ├── firmwareUpdateHelpers.js # Bootloader frame/CRC helpers and parsing
-│   │   └── firmwareUpdateService.js # Bootloader transport/update state machine
+│   │   ├── firmwareUpdateService.js # Bootloader transport/update state machine
+│   │   └── socHistory.js         # SoC ring buffer for the forecast chart
 │   └── utils/
 │       ├── protocol.js           # Binary encode/decode
 │       ├── errorCodes.js         # Error code lookup table
-│       └── theme.js              # Dark theme colors & spacing
+│       └── theme.js              # Carbon Blue tokens, fonts, type presets
 └── assets/                       # Icons & splash screens
 ```
 
@@ -75,6 +81,8 @@ ClaytonPowerApp/
 | `react-native-ble-plx` | 3.5.1 | BLE scanning, connection, GATT |
 | `@react-navigation/native` | v7 | Navigation container |
 | `@react-navigation/bottom-tabs` | v7 | Bottom tab navigator |
+| `react-native-svg` | 15.12 | Gauges, chart, pictograms (native — needs a dev build that includes it) |
+| `expo-font` | 14 | Loads Barlow Semi Condensed (`assets/fonts/`) |
 
 ---
 
@@ -288,38 +296,39 @@ Dashboard and Settings are decoded from CAN frames in `src/services/canGatewaySe
 
 ## 9. Components
 
-### `ScreenHeader` (`src/components/ScreenHeader.js`)
+The UI follows the Carbon Blue language shared with the display. The full
+visual spec is in [Carbon Blue App-spec.md](Carbon%20Blue%20App-spec.md);
+the display spec it derives from is [Carbon Blue Designspec.md](Carbon%20Blue%20Designspec.md).
 
-Shared header used by Dashboard, Settings, Update, and Connect. It renders the app title and the global `UnitSwitcher` when units are known.
+| Component | Role |
+|-----------|------|
+| `StatusBar` | 48 dp status line on every tab: error badge (opens the error list), BLE state, unit chip, clock |
+| `UnitSwitcher` | Unit chip (`LPS`/`BMS` + last four serial digits) and picker sheet |
+| `ErrorCenter` | Mounted once in `App.js`; error list sheet and automatic popup for new FAILURE/CRITICAL codes |
+| `Dial` | 270° gauge; icon colour is the function state (`dialState()` ports the firmware's `set_dial()`); with `onPress` it sits on a round button plate |
+| `ForecastChart` | Time-symmetric SoC chart (history left of NOW, time-true projection right), port of the firmware's `update_chart()` |
+| `Chevrons` | Marching chevrons showing flow direction |
+| `Carbon` | `ScreenTitle`, `Section`, `Row`, `Button`, `Sheet`, `IconButton`, `Notice` |
 
-### `UnitSwitcher` (`src/components/UnitSwitcher.js`)
-
-Header control and modal list for selecting the active app-side CAN unit. The compact header label uses part number plus the last four serial digits, for example `CB2303 - 0021`. The modal shows unit family, part number, and full serial number on separate lines.
-
-### `SocRing` (`src/components/SocRing.js`)
-
-Circular SOC display rendered with React Native views.
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `pct` | number | 0–100 |
-| `size` | number | Diameter in pixels |
+Dashboard polling (`requestDashboard()` every 2 s) runs in `App.js` while BLE is connected, so the status bar, error popups and forecast history update on every tab.
 
 ---
 
 ## 10. Theme
 
-Dark theme defined in `src/utils/theme.js`:
+Carbon Blue tokens in `src/utils/theme.js` (identical values to the display):
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `bg` | `#0d0d0d` | Screen background |
-| `bgElevated` | `#1c1c1e` | Card/sheet background |
-| `bgCard` | `#1a1a1a` | Nested card background |
-| `border` | `#2e2e2e` | Card borders |
-| `text` | `#ffffff` | Primary text |
-| `textMuted` | `#888` | Secondary text |
-| `accent` | `#4b8eff` | Primary action/accent |
-| `green` | `#4ae183` | OK/on/charging |
-| `solar` | `#ffb84a` | Warning/solar |
-| `red` | `#ff453a` | Error/critical |
+| `bg` | `#0B0C0E` | Screen background (near-black) |
+| `panel` | `#26292E` | Grey plates: buttons, dial plates, chip, popups |
+| `sheet` | `#1A1C20` | Bottom sheets |
+| `line` | `#26282C` | Hairline dividers |
+| `track` | `#1F2125` | Empty arcs/tracks |
+| `ink` | `#EFEDE8` | Numbers, labels, arcs |
+| `dim` | `#82868C` | Secondary text, off state |
+| `blue` | `#4E9EEB` | Battery/forecast, on, selected, primary action |
+| `yellow` | `#E6C84A` | Overload / warning |
+| `red` | `#E25454` | Blocked / fault |
+
+Font: Barlow Semi Condensed SemiBold/Bold via `fontAssets`; use the `type` presets rather than raw font sizes.

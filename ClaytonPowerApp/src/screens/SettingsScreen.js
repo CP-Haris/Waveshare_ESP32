@@ -4,16 +4,17 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
-  Modal,
-  ActivityIndicator,
+  Pressable,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, fontSize, radius } from '../utils/theme';
+import StatusBar from '../components/StatusBar';
+import CarbonIcon from '../components/CarbonIcon';
+import { openErrorList, worstColor } from '../components/ErrorCenter';
+import { Button, Row, ScreenTitle, Section, Sheet } from '../components/Carbon';
+import { colors, font, spacing, type } from '../utils/theme';
+import { activeErrorDefinitions } from '../utils/errorCodes';
 import { unitFamily } from '../utils/units';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
-import ScreenHeader from '../components/ScreenHeader';
 
 const PREFIX = {
   VOLTAGE: 1,
@@ -31,26 +32,26 @@ const ENUM_CONFIG = ['None', 'Extension'];
 
 const LPS_CATEGORIES = [
   {
-    key: 'acout', label: 'AC Output', icon: 'power', settings: [
+    key: 'acout', label: 'AC Output', icon: 'socket', settings: [
       { key: '50-0', label: 'Inverter Cutoff', block: 50, id: 0, prefix: PREFIX.PERCENT, decimals: 0, unit: '%', step: 655 },
       { key: '50-1', label: 'Auto Off Delay', block: 50, id: 1, prefix: PREFIX.TIME_HHMMSS, decimals: 0, unit: '', step: 1092 },
       { key: '50-2', label: 'Auto Off Load', block: 50, id: 2, prefix: PREFIX.POWER, decimals: 0, unit: 'W', step: 65536 },
     ],
   },
   {
-    key: 'acin', label: 'AC Input', icon: 'input', settings: [
+    key: 'acin', label: 'AC Input', icon: 'plug', settings: [
       { key: '60-2', label: 'Max Current', block: 60, id: 2, prefix: PREFIX.CURRENT, decimals: 0, unit: 'A', step: 65536 },
     ],
   },
   {
-    key: 'dcout', label: 'DC Output', icon: 'electrical-services', settings: [
+    key: 'dcout', label: 'DC Output', icon: 'dc', settings: [
       { key: '40-0', label: 'Shutdown Delay', block: 40, id: 0, prefix: PREFIX.TIME_HHMMSS, decimals: 0, unit: '', step: 1092 },
       { key: '40-1', label: 'Saver Time', block: 40, id: 1, prefix: PREFIX.TIME_HHMMSS, decimals: 0, unit: '', step: 1092 },
       { key: '40-2', label: 'Saver Current', block: 40, id: 2, prefix: PREFIX.CURRENT, decimals: 0, unit: 'A', step: 65536 },
     ],
   },
   {
-    key: 'dcin', label: 'DC Input', icon: 'ev-station', settings: [
+    key: 'dcin', label: 'DC Input', icon: 'car', settings: [
       { key: '30-1', label: 'Operating Voltage', block: 30, id: 1, prefix: PREFIX.ENUM, decimals: 0, unit: '', step: 65536, enumLabels: ENUM_OP_VOLT },
       { key: '30-7', label: 'Charge Current', block: 30, id: 7, prefix: PREFIX.CURRENT, decimals: 0, unit: 'A', step: 65536 },
       { key: '30-12', label: 'Start Voltage', block: 30, id: 12, prefix: PREFIX.VOLTAGE, decimals: 2, unit: 'V', step: 6553 },
@@ -58,12 +59,12 @@ const LPS_CATEGORIES = [
     ],
   },
   {
-    key: 'solar', label: 'Solar', icon: 'wb-sunny', settings: [
+    key: 'solar', label: 'Solar', icon: 'sun', settings: [
       { key: '70-0', label: 'Operation', block: 70, id: 0, prefix: PREFIX.ENUM, decimals: 0, unit: '', step: 65536, enumLabels: ENUM_SOLAR_OP },
     ],
   },
   {
-    key: 'general', label: 'General', icon: 'tune', settings: [
+    key: 'general', label: 'General', icon: 'gear', settings: [
       { key: '1-1', label: 'Jumpstart Timer', block: 1, id: 1, prefix: PREFIX.TIME_HHMMSS, decimals: 0, unit: '', step: 5461 },
       { key: '7-0', label: 'Config Select', block: 7, id: 0, prefix: PREFIX.ENUM, decimals: 0, unit: '', step: 65536, enumLabels: ENUM_CONFIG },
     ],
@@ -72,7 +73,7 @@ const LPS_CATEGORIES = [
 
 const BMS_CATEGORIES = [
   {
-    key: 'battery', label: 'Battery', icon: 'battery-full', settings: [
+    key: 'battery', label: 'Battery', icon: 'batt', settings: [
       { key: '10-0', label: 'Battery Capacity', block: 10, id: 0, prefix: PREFIX.CURRENT, decimals: 0, unit: 'Ah', step: 65536 },
       { key: '10-1', label: 'DOD Capacity', block: 10, id: 1, prefix: PREFIX.PERCENT, decimals: 0, unit: '%', step: 655 },
     ],
@@ -374,8 +375,9 @@ export default function SettingsScreen() {
   const adjustDraft = useCallback((delta) => {
     if (!editorDef) return;
     const range = settingRanges[editorDef.key];
-    setEditorDraft(clampValue(editorDraft + delta, range?.min, range?.max));
-  }, [editorDef, editorDraft, settingRanges]);
+    // Functional update: the hold-to-repeat timer calls this from a stale closure.
+    setEditorDraft((prev) => clampValue(prev + delta, range?.min, range?.max));
+  }, [editorDef, settingRanges]);
 
   const setEnumDraft = useCallback((index) => {
     if (!editorDef) return;
@@ -420,17 +422,17 @@ export default function SettingsScreen() {
   const editorStatus = editorDef ? saveStatus[editorDef.key] : null;
 
   const getStatusMeta = useCallback((key) => {
-    if (loadingSettings[key]) return { text: 'Loading', color: colors.textMuted, icon: 'hourglass-top' };
+    if (loadingSettings[key]) return { text: 'LOADING', color: colors.dim };
     switch (saveStatus[key]) {
       case 'saving':
       case 'queued':
-        return { text: 'Saving', color: colors.solar, icon: 'sync' };
+        return { text: 'SAVING', color: colors.blue };
       case 'saved':
-        return { text: 'Saved', color: colors.green, icon: 'check-circle' };
+        return { text: 'SAVED', color: colors.dim };
       case 'timeout':
-        return { text: 'No reply', color: colors.solar, icon: 'schedule' };
+        return { text: 'NO REPLY', color: colors.yellow };
       case 'error':
-        return { text: 'Failed', color: colors.red, icon: 'error-outline' };
+        return { text: 'FAILED', color: colors.red };
       default:
         return null;
     }
@@ -438,368 +440,231 @@ export default function SettingsScreen() {
 
   const editorEnumIndex = editorDef?.prefix === PREFIX.ENUM ? editorDraft >> 16 : null;
   const editorFastStep = editorDef ? getFastStep(editorDef) : 65536;
+  const errorDefs = activeErrorDefinitions(errors);
+  const range = editorDef ? settingRanges[editorDef.key] : null;
+  const rangeFill = range && range.max > range.min
+    ? Math.max(0, Math.min(1, (editorDraft - range.min) / (range.max - range.min)))
+    : 0;
 
   if (!connected) {
     return (
-      <View style={styles.center}>
-        <MaterialIcons name="bluetooth-disabled" size={40} color={colors.textGhost} />
-        <Text style={styles.centerHint}>Connect a device first</Text>
+      <View style={styles.screen}>
+        <StatusBar />
+        <ScreenTitle title="SETTINGS" />
+        <View style={styles.center}>
+          <CarbonIcon name="bt" size={48} color={colors.faint} />
+          <Text style={[type.zone, styles.dim]}>NOT CONNECTED</Text>
+        </View>
       </View>
     );
   }
 
+  const inDetail = screen === 'detail' && selectedCategory;
+
   return (
-    <>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <ScreenHeader />
+    <View style={styles.screen}>
+      <StatusBar />
+      <ScreenTitle
+        title={inDetail ? selectedCategory.label.toUpperCase() : 'SETTINGS'}
+        onBack={inDetail ? () => { clearPendingSettingActivity(); setScreen('categories'); } : undefined}
+      />
 
-        <Text style={styles.pageTitle}>Settings</Text>
-        <Text style={styles.pageSubtitle}>
-          {screen === 'categories' ? 'Choose a settings category to edit.' : selectedCategory?.label || 'Settings'}
-        </Text>
-
-        <Text style={styles.sectionLabel}>DIAGNOSTICS</Text>
-        <TouchableOpacity style={styles.diagCard} onPress={refreshErrors}>
-          <MaterialIcons
-            name={errors.length > 0 ? 'error-outline' : 'check-circle'}
-            size={24}
-            color={errors.length > 0 ? colors.red : colors.green}
-          />
-          <View style={styles.diagInfo}>
-            <Text style={styles.diagTitle}>Active Error Logs</Text>
-            <Text style={[styles.diagSub, { color: errors.length > 0 ? colors.red : colors.green }]}>
-              {errors.length > 0 ? errors.map((c) => `Error #${c}`).join(', ') : 'System operating normally'}
-            </Text>
-          </View>
-          <View style={styles.errorBadge}>
-            <Text style={styles.errorBadgeText}>{errors.length}</Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={20} color={colors.textGhost} />
-        </TouchableOpacity>
-
-        {screen === 'categories' && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: spacing.sm }]}>CONFIGURATION PROFILES</Text>
-            <View style={styles.categoryList}>
-              {categories.map((cat, idx) => (
-                <TouchableOpacity
-                  key={cat.key}
-                  style={[styles.categoryRow, idx === categories.length - 1 && { borderBottomWidth: 0 }]}
-                  onPress={() => openCategory(cat)}
-                >
-                  <View style={styles.categoryIconCircle}>
-                    <MaterialIcons name={cat.icon} size={16} color={colors.accent} />
-                  </View>
-                  <Text style={styles.categoryLabel}>{cat.label}</Text>
-                  <MaterialIcons name="chevron-right" size={20} color={colors.textGhost} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
+      <ScrollView contentContainerStyle={styles.content}>
+        {!inDetail && (
+          <Section>
+            <Row
+              kind="nav"
+              icon="warn"
+              iconColor={worstColor(errorDefs)}
+              label="Errors"
+              height={62}
+              onPress={() => { refreshErrors(); openErrorList(); }}
+              right={errorDefs.length > 0
+                ? <Text style={[type.value, { color: worstColor(errorDefs) }]}>{errorDefs.length}</Text>
+                : null}
+            />
+            {categories.map((cat, idx) => (
+              <Row
+                key={cat.key}
+                kind="nav"
+                icon={cat.icon}
+                label={cat.label}
+                height={62}
+                last={idx === categories.length - 1}
+                onPress={() => openCategory(cat)}
+              />
+            ))}
+          </Section>
         )}
 
-        {screen === 'detail' && selectedCategory && (
-          <>
-            <View style={[styles.sectionRow, { marginTop: spacing.sm }]}>
-              <Text style={styles.sectionLabel}>{selectedCategory.label.toUpperCase()}</Text>
-              <TouchableOpacity onPress={() => { clearPendingSettingActivity(); setScreen('categories'); }}>
-                <Text style={styles.backText}>Back</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.detailCard}>
-              {selectedCategory.settings.map((s, idx) => {
-                const valueText = formatSettingValue(s, settingValues[s.key]);
-                const statusMeta = getStatusMeta(s.key);
-                return (
-                  <TouchableOpacity
-                    key={s.key}
-                    style={[styles.settingRow, idx === selectedCategory.settings.length - 1 && { borderBottomWidth: 0 }]}
-                    onPress={() => openEditor(s)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.settingName}>{s.label}</Text>
-                      <Text style={styles.settingSub}>Block {s.block} / ID {s.id}</Text>
-                      {statusMeta && (
-                        <View style={styles.inlineStatus}>
-                          {loadingSettings[s.key] ? (
-                            <ActivityIndicator size="small" color={statusMeta.color} />
-                          ) : (
-                            <MaterialIcons name={statusMeta.icon} size={14} color={statusMeta.color} />
-                          )}
-                          <Text style={[styles.inlineStatusText, { color: statusMeta.color }]}>{statusMeta.text}</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.settingValueWrap}>
-                      <Text style={styles.settingValue}>{valueText}</Text>
-                      <MaterialIcons name="edit" size={16} color={colors.textFaint} />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
+        {inDetail && (
+          <Section title="SETTINGS">
+            {selectedCategory.settings.map((s, idx) => {
+              const statusMeta = getStatusMeta(s.key);
+              return (
+                <Row
+                  key={s.key}
+                  kind="setting"
+                  label={s.label}
+                  value={formatSettingValue(s, settingValues[s.key])}
+                  tag={statusMeta?.text}
+                  tagColor={statusMeta?.color}
+                  last={idx === selectedCategory.settings.length - 1}
+                  onPress={() => openEditor(s)}
+                />
+              );
+            })}
+          </Section>
         )}
-
-        <View style={{ height: spacing.lg }} />
       </ScrollView>
 
-      <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{editorDef?.label || 'Setting'}</Text>
-            <Text style={styles.modalValue}>{editorDef ? formatSettingValue(editorDef, editorDraft) : '--'}</Text>
+      <Sheet
+        visible={editorVisible}
+        onClose={() => setEditorVisible(false)}
+        title={editorDef ? `${(selectedCategory?.label || '').toUpperCase()} · ${editorDef.label.toUpperCase()}` : ''}
+      >
+        {editorStatus && (
+          <Text style={[type.micro, styles.editorStatus, { color: getStatusMeta(editorDef.key)?.color || colors.dim }]}>
+            {editorStatus === 'saving' || editorStatus === 'queued'
+              ? 'SAVING TO DEVICE…'
+              : editorStatus === 'saved'
+                ? 'SAVED'
+                : editorStatus === 'error'
+                  ? 'SAVE FAILED'
+                  : 'DEVICE DID NOT CONFIRM YET'}
+          </Text>
+        )}
 
-            {editorDef && (
-              <Text style={styles.modalRange}>
-                Range: {formatSettingValue(editorDef, settingRanges[editorDef.key]?.min)} - {formatSettingValue(editorDef, settingRanges[editorDef.key]?.max)}
-              </Text>
-            )}
-
-            {editorStatus && (
-              <View style={styles.modalStatusRow}>
-                {editorStatus === 'saving' || editorStatus === 'queued' ? (
-                  <ActivityIndicator size="small" color={colors.solar} />
-                ) : (
-                  <MaterialIcons
-                    name={editorStatus === 'saved' ? 'check-circle' : editorStatus === 'error' ? 'error-outline' : 'schedule'}
-                    size={16}
-                    color={editorStatus === 'saved' ? colors.green : editorStatus === 'error' ? colors.red : colors.solar}
-                  />
-                )}
-                <Text
-                  style={[
-                    styles.modalStatusText,
-                    editorStatus === 'saved' && { color: colors.green },
-                    editorStatus === 'error' && { color: colors.red },
-                    (editorStatus === 'saving' || editorStatus === 'queued' || editorStatus === 'timeout') && { color: colors.solar },
-                  ]}
+        {editorDef?.prefix === PREFIX.ENUM && editorDef.enumLabels ? (
+          <View style={styles.enumList}>
+            {editorDef.enumLabels.map((label, index) => {
+              const selected = index === editorEnumIndex;
+              return (
+                <Pressable
+                  key={`${editorDef.key}-${label}`}
+                  style={({ pressed }) => [styles.enumRow, selected && styles.enumRowOn, pressed && styles.pressed]}
+                  onPress={() => setEnumDraft(index)}
                 >
-                  {editorStatus === 'saving' || editorStatus === 'queued'
-                    ? 'Saving to device...'
-                    : editorStatus === 'saved'
-                      ? 'Saved successfully'
-                      : editorStatus === 'error'
-                        ? 'Save failed'
-                        : 'Device did not confirm yet'}
-                </Text>
-              </View>
-            )}
-
-            {editorDef?.prefix === PREFIX.ENUM && editorDef.enumLabels ? (
-              <View style={styles.enumGrid}>
-                {editorDef.enumLabels.map((label, index) => {
-                  const selected = index === editorEnumIndex;
-                  return (
-                    <TouchableOpacity
-                      key={`${editorDef.key}-${label}`}
-                      style={[styles.enumChip, selected && styles.enumChipActive]}
-                      onPress={() => setEnumDraft(index)}
-                    >
-                      <Text style={[styles.enumChipText, selected && styles.enumChipTextActive]}>{label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : (
-              <>
-                <View style={styles.stepLegendRow}>
-                  <Text style={styles.stepLegend}>Quick</Text>
-                  <Text style={styles.stepLegend}>Fine</Text>
-                  <Text style={styles.stepLegend}>Fine</Text>
-                  <Text style={styles.stepLegend}>Quick</Text>
-                </View>
-                <View style={styles.adjustRowFour}>
-                  <TouchableOpacity style={styles.adjustBtn} onPress={() => adjustDraft(-editorFastStep)}>
-                    <Text style={styles.adjustBtnLabel}>- -</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.adjustBtn} onPress={() => adjustDraft(-(editorDef?.step || 65536))}>
-                    <Text style={styles.adjustBtnLabel}>-</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.adjustBtn} onPress={() => adjustDraft(editorDef?.step || 65536)}>
-                    <Text style={styles.adjustBtnLabel}>+</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.adjustBtn} onPress={() => adjustDraft(editorFastStep)}>
-                    <Text style={styles.adjustBtnLabel}>+ +</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondary} onPress={() => setEditorVisible(false)}>
-                <Text style={styles.modalSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimary} onPress={saveEditor}>
-                <Text style={styles.modalPrimaryText}>Save</Text>
-              </TouchableOpacity>
-            </View>
+                  <View style={[styles.radio, selected && styles.radioOn]}>
+                    {selected && <View style={styles.radioDot} />}
+                  </View>
+                  <Text style={[type.label, !selected && styles.dim]}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
+        ) : (
+          <>
+            <View style={styles.editRow}>
+              <StepButton icon="minus" onStep={(fast) => adjustDraft(-(fast ? editorFastStep : (editorDef?.step || 65536)))} />
+              <EditorValue text={editorDef ? formatSettingValue(editorDef, editorDraft) : '--'} />
+              <StepButton icon="plus" onStep={(fast) => adjustDraft(fast ? editorFastStep : (editorDef?.step || 65536))} />
+            </View>
+            <View style={styles.rangeTrack}>
+              <View style={[styles.rangeFill, { width: `${rangeFill * 100}%` }]} />
+            </View>
+            <View style={styles.rangeLabels}>
+              <Text style={type.small}>{editorDef ? formatSettingValue(editorDef, range?.min) : '--'}</Text>
+              <Text style={type.small}>{editorDef ? formatSettingValue(editorDef, range?.max) : '--'}</Text>
+            </View>
+          </>
+        )}
+
+        <View style={styles.editorActions}>
+          <Button label="CANCEL" onPress={() => setEditorVisible(false)} style={styles.flex} />
+          <Button label="SAVE" variant="primary" onPress={saveEditor} style={styles.flex} />
         </View>
-      </Modal>
-    </>
+      </Sheet>
+    </View>
+  );
+}
+
+// Editor value as on the display: large number, small dim unit ("85 %").
+// Non-numeric values (enum labels, "1h 05m", "OFF") stay in one piece.
+function EditorValue({ text }) {
+  const m = String(text).match(/^(-?\d+(?:\.\d+)?)\s+(\S+)$/);
+  return (
+    <Text style={styles.editValue} numberOfLines={1} adjustsFontSizeToFit>
+      {m ? m[1] : text}
+      {m && <Text style={styles.editUnit}> {m[2]}</Text>}
+    </Text>
+  );
+}
+
+// Round −/+ (spec §8): tap = fine step; hold = auto-repeat, switching to the
+// coarse step after five repeats.
+function StepButton({ icon, onStep }) {
+  const timerRef = useRef(null);
+  const countRef = useRef(0);
+
+  const stop = () => {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  };
+
+  const tick = () => {
+    countRef.current += 1;
+    onStep(countRef.current > 5);
+    timerRef.current = setTimeout(tick, 110);
+  };
+
+  useEffect(() => stop, []);
+
+  return (
+    <Pressable
+      onPressIn={() => {
+        countRef.current = 0;
+        onStep(false);
+        timerRef.current = setTimeout(tick, 450);
+      }}
+      onPressOut={stop}
+      style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
+    >
+      <CarbonIcon name={icon} size={36} strokeWidth={2} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.md },
-  center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  centerHint: { color: colors.textMuted, fontSize: fontSize.md, fontWeight: '700' },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  content: { paddingBottom: spacing.lg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  dim: { color: colors.dim },
+  flex: { flex: 1 },
+  pressed: { backgroundColor: colors.panelPressed },
 
-  pageTitle: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: 4 },
-  pageSubtitle: { color: colors.textMuted, fontSize: fontSize.sm, marginBottom: spacing.lg },
-
-  sectionLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
-  },
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  backText: { color: colors.accent, fontWeight: '700', fontSize: fontSize.sm },
-
-  diagCard: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  diagInfo: { flex: 1 },
-  diagTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '700' },
-  diagSub: { fontSize: fontSize.sm, marginTop: 2 },
-  errorBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.bgInset,
+  editorStatus: { marginTop: 2 },
+  editRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.md },
+  editValue: { flex: 1, textAlign: 'center', fontFamily: font.bold, fontSize: 56, color: colors.ink, fontVariant: ['tabular-nums'] },
+  editUnit: { fontFamily: font.semibold, fontSize: 24, color: colors.dim },
+  stepBtn: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  errorBadgeText: { color: colors.textLight, fontWeight: '800', fontSize: 13 },
-
-  categoryList: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
+    backgroundColor: colors.panel,
     borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
+    borderColor: colors.edge,
   },
-  categoryRow: {
+  rangeTrack: { height: 6, backgroundColor: colors.track, marginTop: spacing.lg },
+  rangeFill: { height: 6, backgroundColor: colors.blue },
+  rangeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
+
+  enumList: { marginTop: spacing.sm },
+  enumRow: {
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
+    gap: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-    gap: spacing.sm,
+    borderBottomColor: colors.rowLine,
   },
-  categoryIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.bgInset,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryLabel: { flex: 1, color: colors.text, fontSize: fontSize.md },
+  enumRowOn: { backgroundColor: colors.panel },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.dim, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: colors.blue },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue },
 
-  detailCard: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  settingRow: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  settingName: { color: colors.text, fontSize: fontSize.md, fontWeight: '700' },
-  settingSub: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 2 },
-  inlineStatus: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  inlineStatusText: { fontSize: fontSize.xs, fontWeight: '700' },
-  settingValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  settingValue: { color: colors.accent, fontSize: fontSize.sm, fontWeight: '700' },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: colors.bgOverlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.md,
-  },
-  modalCard: {
-    width: '100%',
-    backgroundColor: '#171717',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  modalTitle: { color: colors.text, fontSize: fontSize.lg, fontWeight: '800' },
-  modalValue: { color: colors.accent, fontSize: 28, fontWeight: '800', marginTop: 8 },
-  modalRange: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 6 },
-  modalStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  modalStatusText: { fontSize: fontSize.xs, fontWeight: '700' },
-  enumGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  enumChip: {
-    minWidth: '30%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.borderInput,
-    backgroundColor: '#232323',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  enumChipActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  enumChipText: { color: '#ddd', fontWeight: '700', fontSize: fontSize.sm },
-  enumChipTextActive: { color: colors.text },
-  stepLegendRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, marginBottom: 6 },
-  stepLegend: { flex: 1, textAlign: 'center', color: '#777', fontSize: fontSize.xs, fontWeight: '700' },
-  adjustRowFour: { flexDirection: 'row', gap: spacing.sm },
-  adjustBtn: {
-    flex: 1,
-    borderRadius: radius.md,
-    backgroundColor: colors.bgInset,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-  },
-  adjustBtnLabel: { color: colors.text, fontSize: fontSize.md, fontWeight: '800', letterSpacing: 0.5 },
-  modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  modalSecondary: {
-    flex: 1,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.borderInput,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  modalSecondaryText: { color: colors.textDim, fontWeight: '700' },
-  modalPrimary: {
-    flex: 1,
-    borderRadius: radius.md,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  modalPrimaryText: { color: colors.text, fontWeight: '800' },
+  editorActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
 });

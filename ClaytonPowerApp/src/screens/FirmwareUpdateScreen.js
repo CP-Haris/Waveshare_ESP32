@@ -4,12 +4,10 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, fontSize, radius } from '../utils/theme';
-import ScreenHeader from '../components/ScreenHeader';
+import StatusBar from '../components/StatusBar';
+import { Button, Notice, Row, ScreenTitle, Section } from '../components/Carbon';
+import { colors, font, spacing, type } from '../utils/theme';
 import firmwareUpdateService from '../services/firmwareUpdateService';
 import bleService from '../services/bleService';
 import canGatewayService from '../services/canGatewayService';
@@ -279,358 +277,119 @@ export default function FirmwareUpdateScreen({ route }) {
     abortRef.current?.abort();
   };
 
+
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      <ScreenHeader />
-
-      <View style={styles.topRow}>
-        <View>
-          <Text style={styles.title}>Firmware Update</Text>
-          <Text style={styles.subtitle}>CAN bootloader over BLE gateway</Text>
-        </View>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.sectionRow}>
-          <Text style={styles.section}>Target</Text>
-          <TouchableOpacity
-            style={[styles.refreshBtn, (!connected || targetLoading || running) && styles.refreshBtnDisabled]}
+    <View style={styles.screen}>
+      <StatusBar />
+      <ScreenTitle
+        title="UPDATE"
+        right={(
+          <Button
+            compact
+            label="RESCAN"
+            icon="refresh"
+            loading={targetLoading}
+            disabled={!connected || running}
             onPress={detectTarget}
-            disabled={!connected || targetLoading || running}
-          >
-            {targetLoading ? (
-              <ActivityIndicator size="small" color={colors.text} />
-            ) : (
-              <MaterialIcons name="refresh" size={16} color={colors.text} />
-            )}
-            <Text style={styles.refreshBtnText}>Rescan</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.targetStatusRow}>
-          <MaterialIcons
-            name={connected ? 'bluetooth-connected' : 'bluetooth-disabled'}
-            size={16}
-            color={connected ? colors.green : colors.red}
           />
-          <Text style={styles.targetStatusText}>{connected ? 'BLE connected' : 'BLE disconnected'}</Text>
-        </View>
+        )}
+      />
 
-        {target ? (
-          <>
-            <Text style={styles.targetLine}>CAN ID: {target.applicationCanId != null ? `0x${Number(target.applicationCanId).toString(16).toUpperCase().padStart(2, '0')}` : '-'}</Text>
-            <Text style={styles.targetLine}>Part Number: {target.partNumber || '-'}</Text>
-            <Text style={styles.targetLine}>Serial: {target.serialNumber || '-'}</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        {!target && (
+          <Section>
+            <Text style={[type.small, styles.hint]}>
+              {targetLoading ? 'Detecting unit…' : connected ? 'No unit detected yet' : 'Not connected'}
+            </Text>
+            {!!targetError && connected && <Notice text={targetError} />}
+          </Section>
+        )}
 
+        {target && (
+          <Section title="MODULES">
             {planLoading ? (
-              <Text style={styles.targetHint}>Loading firmware plan...</Text>
+              <Text style={[type.small, styles.hint]}>Loading firmware plan…</Text>
+            ) : updatePlan.length > 0 ? (
+              updatePlan.map((item, idx) => {
+                const isUpdatable = item.status === 'updatable';
+                const isUnavailable = item.status === 'unavailable';
+                const moduleName = getModuleName(target.partNumber || partFromRoute, item.bridgeId);
+                const versions = isUnavailable
+                  ? 'No response'
+                  : isUpdatable
+                    ? `v${item.currentVersionString}  →  v${item.targetVersionString || item.latestVersionString}`
+                    : `v${item.currentVersionString}`;
+                return (
+                  <Row
+                    key={`bridge-${item.bridgeId}`}
+                    kind="item"
+                    icon={isUpdatable ? 'update' : isUnavailable ? 'minus' : 'check'}
+                    iconColor={isUpdatable ? colors.blue : isUnavailable ? colors.dim : colors.ink}
+                    label={moduleName}
+                    tag={versions}
+                    tagColor={isUpdatable ? colors.blue : colors.dim}
+                    last={idx === updatePlan.length - 1}
+                  />
+                );
+              })
             ) : (
-              <>
-                {updatePlan.length > 0 ? (
-                  <>
-                    <View style={styles.targetPlanSummaryRow}>
-                      <Text style={[styles.targetPlanSummary, { color: colors.accent }]}>Can update: {planSummary.updatable}</Text>
-                      <Text style={styles.targetPlanSummarySep}>|</Text>
-                      <Text style={[styles.targetPlanSummary, { color: colors.green }]}>Latest installed: {planSummary.upToDate}</Text>
-                      {planSummary.unavailable > 0 && (
-                        <>
-                          <Text style={styles.targetPlanSummarySep}>|</Text>
-                          <Text style={[styles.targetPlanSummary, { color: colors.textMuted }]}>Cannot update: {planSummary.unavailable}</Text>
-                        </>
-                      )}
-                    </View>
-
-                    {updatePlan.map((item) => {
-                      const isUpdatable = item.status === 'updatable';
-                      const isUnavailable = item.status === 'unavailable';
-                      const moduleName = getModuleName(target.partNumber || partFromRoute, item.bridgeId);
-                      const statusLabel = isUpdatable
-                        ? 'Can update'
-                        : isUnavailable
-                          ? 'Cannot update'
-                          : 'Latest installed';
-                      const statusColor = isUpdatable
-                        ? colors.accent
-                        : isUnavailable
-                          ? colors.textMuted
-                        : colors.green;
-                      const statusIcon = isUpdatable
-                        ? 'system-update'
-                        : isUnavailable
-                          ? 'block'
-                        : 'check-circle';
-
-                      return (
-                        <View key={`bridge-${item.bridgeId}`} style={[styles.bridgeRow, isUnavailable && styles.bridgeRowUnavailable]}>
-                          <View style={styles.bridgeRowTop}>
-                            <Text style={styles.bridgeTitle}>{moduleName}</Text>
-                            <View style={styles.bridgeStatusWrap}>
-                              <MaterialIcons name={statusIcon} size={14} color={statusColor} />
-                              <Text style={[styles.bridgeStatusText, { color: statusColor }]}>{statusLabel}</Text>
-                            </View>
-                          </View>
-
-                          {isUnavailable ? (
-                            <Text style={styles.bridgeLine}>Current version: no response</Text>
-                          ) : (
-                            <>
-                              <Text style={styles.bridgeLine}>Current version: v{item.currentVersionString}</Text>
-                              <Text style={styles.bridgeLine}>
-                                {isUpdatable
-                                  ? `Target version: v${item.targetVersionString || item.latestVersionString}`
-                                  : `Target version: v${item.targetVersionString || item.currentVersionString}`}
-                              </Text>
-                            </>
-                          )}
-                          <Text style={styles.bridgeHint}>
-                            {isUpdatable
-                              ? 'This module can be updated now.'
-                              : isUnavailable
-                                ? 'No version response from this bridge.'
-                                : 'Latest installed.'}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <Text style={styles.targetHint}>No module firmware versions reported from target.</Text>
-                )}
-
-                {!planError && updatePlan.length > 0 ? (
-                  <Text style={styles.targetHint}>
-                    {updatesToRun.length > 0
-                      ? `${updatesToRun.length} module update(s) ready`
-                      : 'No newer released firmware available'}
-                  </Text>
-                ) : null}
-              </>
+              <Text style={[type.small, styles.hint]}>No module firmware versions reported.</Text>
             )}
-          </>
-        ) : (
-          <Text style={styles.logEmpty}>{targetLoading ? 'Detecting target...' : 'No target detected yet'}</Text>
+            {!!planError && <Notice text={planError} />}
+          </Section>
         )}
 
-        {targetError ? <Text style={styles.targetError}>{targetError}</Text> : null}
-        {planError ? <Text style={styles.targetError}>{planError}</Text> : null}
-
-        <Text style={styles.targetHint}>Target and module updates are selected automatically at update start.</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.section}>Progress</Text>
-
-        <View style={styles.progressWrap}>
-          <View style={[styles.progressFill, { width: `${transferPercent}%` }]} />
-        </View>
-        <Text style={styles.progressText}>
-          {running
-            ? (transferTotal > 0
-                ? `${transferPercent}%  •  Package ${transferCurrent}/${transferTotal}`
-                : 'Preparing bootloader...')
-            : (transferTotal > 0
-                ? `${transferPercent}%  •  Package ${transferCurrent}/${transferTotal}`
-                : 'Not started')}
-        </Text>
-
-        {result && (
-          <View style={[styles.resultBox, result.ok ? styles.resultOk : styles.resultErr]}>
-            <MaterialIcons name={result.ok ? 'check-circle' : 'error-outline'} size={18} color={result.ok ? colors.green : colors.red} />
-            <Text style={[styles.resultText, { color: result.ok ? colors.green : colors.red }]}>{result.text}</Text>
+        <Section title="PROGRESS">
+          <View style={styles.progressHead}>
+            <View style={styles.pctRow}>
+              <Text style={type.total}>{transferPercent}</Text>
+              <Text style={styles.pctUnit}>%</Text>
+            </View>
+            <Text style={type.small}>
+              {running && transferTotal === 0
+                ? 'PREPARING BOOTLOADER'
+                : transferTotal > 0
+                  ? `PACKAGE ${transferCurrent}/${transferTotal}`
+                  : updatesToRun.length > 0
+                    ? `${updatesToRun.length} MODULE${updatesToRun.length > 1 ? 'S' : ''} READY`
+                    : 'UP TO DATE'}
+            </Text>
           </View>
-        )}
+          <View style={styles.track}>
+            <View style={[styles.fill, { width: `${transferPercent}%` }]} />
+          </View>
 
-        <View style={styles.actions}>
-          {!running ? (
-            <TouchableOpacity
-              style={[styles.primaryBtn, !canStart && styles.primaryBtnDisabled]}
-              disabled={!canStart}
-              onPress={runUpdate}
-            >
-              <MaterialIcons name="system-update" size={18} color={colors.text} />
-              <Text style={styles.primaryBtnText}>
-                {updatesToRun.length > 1 ? `Start Update (${updatesToRun.length} modules)` : 'Start Update'}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <View style={styles.runningBox}>
-                <ActivityIndicator size="small" color={colors.solar} />
-                <Text style={styles.runningText}>Update running...</Text>
-              </View>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={cancelUpdate}>
-                <MaterialIcons name="stop" size={16} color={colors.red} />
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
+          {result && <Notice text={result.text} color={result.ok ? colors.blue : colors.red} />}
 
-      <View style={{ height: spacing.lg }} />
-    </ScrollView>
+          <View style={styles.actions}>
+            {!running ? (
+              <Button
+                variant="primary"
+                icon="update"
+                label={updatesToRun.length > 1 ? `START UPDATE · ${updatesToRun.length}` : 'START UPDATE'}
+                disabled={!canStart}
+                onPress={runUpdate}
+              />
+            ) : (
+              <Button icon="stop" label="CANCEL" onPress={cancelUpdate} />
+            )}
+          </View>
+        </Section>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  content: { paddingBottom: spacing.lg },
+  hint: { paddingVertical: spacing.md },
 
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  title: { color: colors.text, fontSize: 30, fontWeight: '800' },
-  subtitle: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
+  progressHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: spacing.xs },
+  pctRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  pctUnit: { fontFamily: font.semibold, fontSize: 18, color: colors.dim, marginTop: 4 },
+  track: { height: 6, backgroundColor: colors.track, marginTop: spacing.sm },
+  fill: { height: 6, backgroundColor: colors.blue },
 
-  card: {
-    backgroundColor: colors.bgElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-
-  section: {
-    color: colors.text,
-    fontSize: fontSize.md,
-    fontWeight: '800',
-    marginBottom: spacing.sm,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  refreshBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  refreshBtnDisabled: { opacity: 0.5 },
-  refreshBtnText: { color: colors.text, fontWeight: '800', fontSize: fontSize.xs },
-
-  targetStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: spacing.sm,
-  },
-  targetStatusText: { color: colors.textMuted, fontSize: fontSize.sm, fontWeight: '700' },
-  targetLine: { color: colors.textLight, fontSize: fontSize.sm, marginBottom: 4 },
-  targetPlanSummary: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-  },
-  targetPlanSummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: spacing.sm,
-  },
-  targetPlanSummarySep: {
-    color: colors.textMuted,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-  },
-  bridgeRow: {
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgCard,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  bridgeRowUnavailable: { borderColor: colors.border, backgroundColor: colors.bgInset },
-  bridgeRowTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  bridgeTitle: { color: colors.text, fontSize: fontSize.sm, fontWeight: '800' },
-  bridgeStatusWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  bridgeStatusText: { fontSize: fontSize.xs, fontWeight: '800' },
-  bridgeLine: { color: colors.textLight, fontSize: fontSize.sm, marginBottom: 2 },
-  bridgeHint: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
-  targetError: { color: colors.red, fontSize: fontSize.xs, marginTop: 6, fontWeight: '700' },
-  targetHint: { color: colors.textFaint, fontSize: fontSize.xs, marginTop: 8 },
-
-  progressWrap: {
-    height: 10,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: colors.bgInset,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  progressFill: {
-    height: 10,
-    backgroundColor: colors.accent,
-  },
-  progressText: {
-    color: colors.textLight,
-    fontSize: fontSize.sm,
-    marginTop: 6,
-    fontWeight: '700',
-  },
-
-  resultBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  resultOk: { borderColor: colors.greenBorder, backgroundColor: colors.greenDeep },
-  resultErr: { borderColor: colors.redBg, backgroundColor: colors.redDeep },
-  resultText: { fontWeight: '700', fontSize: fontSize.sm },
-
-  actions: { marginTop: spacing.sm, gap: spacing.sm },
-  primaryBtn: {
-    borderRadius: radius.md,
-    backgroundColor: colors.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: spacing.sm,
-  },
-  primaryBtnDisabled: { opacity: 0.45 },
-  primaryBtnText: { color: colors.text, fontWeight: '800' },
-
-  runningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: spacing.sm,
-  },
-  runningText: { color: colors.solar, fontWeight: '700' },
-
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: colors.redBg,
-    backgroundColor: colors.redDeep,
-    borderRadius: radius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: spacing.sm,
-  },
-  secondaryBtnText: { color: colors.red, fontWeight: '800' },
-
-  logEmpty: { color: colors.textFaint, fontSize: fontSize.sm },
+  actions: { marginTop: spacing.md },
 });

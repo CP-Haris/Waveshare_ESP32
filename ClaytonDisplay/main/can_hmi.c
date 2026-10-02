@@ -241,10 +241,18 @@ static bool    can_target_valid = false;
 #define FLOAT_TO_Q16(f) ((int32_t)((f) * 65536.0f))
 
 // ---------------------------------------------------------------------------
-//  Buzzer stubs (no buzzer on ESP32-S3-Touch-LCD-5)
+//  Buzzer (CP board only — the port layer makes these no-ops on Waveshare)
 // ---------------------------------------------------------------------------
-static void buzzer_click(void)        { }
-static void buzzer_alarm(void)        { }
+static void buzzer_click(void)        { waveshare_buzzer_click(); }
+
+/* Alarm by failure level (FL_* values below); each level has its own
+ * melody so it can be told apart without looking. */
+static void buzzer_alarm(uint8_t level)
+{
+    if (level >= 4)      waveshare_buzzer_alarm(BUZZ_CRITICAL);
+    else if (level >= 2) waveshare_buzzer_alarm(BUZZ_FAILURE);
+    else                 waveshare_buzzer_alarm(BUZZ_WARNING);
+}
 
 // ---------------------------------------------------------------------------
 //  TWAI bus lifecycle
@@ -290,6 +298,9 @@ esp_err_t can_hmi_bus_start(void)
         twai_driver_uninstall();
         return err;
     }
+    // CP board: the transceiver's S pin is pulled high (standby) at power-on
+    // and must be driven low via the IO expander — no-op on Waveshare.
+    waveshare_can_transceiver_enable(true);
     twai_installed = true;
     return ESP_OK;
 }
@@ -301,6 +312,8 @@ static void can_bus_stop(void)
     twai_installed = false;
     twai_stop();
     twai_driver_uninstall();
+    // Transceiver to standby (low power; RXD still signals bus wake-up)
+    waveshare_can_transceiver_enable(false);
 }
 
 // CANRX (IO16) as a light-sleep wake source. A dominant bit pulls the line low,
@@ -1168,8 +1181,20 @@ static void decode_failure_codes(lps_data_t *d, const uint8_t *data)
             if (d->failure_codes[j] == oc) { still_in_buf = true; break; }
         if (!still_in_buf) { error_flags[oc].active = 0; error_flags[oc].minimized = 0; }
     }
-    for (int i = 0; i < 8; i++)
-        if (d->failure_codes[i] != 0) error_flags[d->failure_codes[i]].active = 1;
+    /* Sound once per NEWLY appearing code (incl. POP_HIDE warnings such as
+     * overloads), at the level of the most severe new code. */
+    int alarm_level = -1;
+    for (int i = 0; i < 8; i++) {
+        uint8_t c = d->failure_codes[i];
+        if (c == 0) continue;
+        if (!error_flags[c].active) {
+            const error_def_t *def = lookup_error(c);
+            int lvl = def ? def->level : FL_SIMPLE_FAILURE;
+            if (lvl > alarm_level) alarm_level = lvl;
+        }
+        error_flags[c].active = 1;
+    }
+    if (alarm_level >= FL_WARNING) buzzer_alarm((uint8_t)alarm_level);
 }
 
 static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint8_t len)
@@ -2923,7 +2948,7 @@ static void update_dashboard(void)
 
 enum {
     PWR_ACTIVE,         // Normal operation — display on
-    PWR_SLEEP_SPLASH,   // Showing "CLAYTON POWER" 2s before sleeping
+    PWR_SLEEP_SPLASH,   // Showing the Clayton Power logo 2s before sleeping
     PWR_SLEEPING,       // Display off, only CAN polling
     PWR_WAKE_SPLASH,    // Waking up — showing splash for 2s
     PWR_DASHBOARD,      // Dashboard shown for 30s after wake
@@ -3064,6 +3089,8 @@ static bool touch_is_pressed_direct(void)
     return pressed;
 }
 
+LV_IMG_DECLARE(splash_logo);
+
 static void pwr_show_splash(void)
 {
     if (pwr_splash_scr) return;  // Already showing
@@ -3072,21 +3099,19 @@ static void pwr_show_splash(void)
     pwr_splash_scr = lv_obj_create(scr);
     lv_obj_remove_style_all(pwr_splash_scr);
     lv_obj_set_size(pwr_splash_scr, SCREEN_W, SCREEN_H);
-    lv_obj_set_style_bg_color(pwr_splash_scr, COL_BG_DARK, 0);
+    lv_obj_set_style_bg_color(pwr_splash_scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(pwr_splash_scr, LV_OPA_COVER, 0);
     lv_obj_clear_flag(pwr_splash_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title = lv_label_create(pwr_splash_scr);
-    lv_label_set_text(title, "CLAYTON POWER");
-    lv_obj_set_style_text_color(title, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
-    lv_obj_align(title, LV_ALIGN_CENTER, 0, -10);
-
-    lv_obj_t *sub = lv_label_create(pwr_splash_scr);
-    lv_label_set_text(sub, "Standby");
-    lv_obj_set_style_text_color(sub, COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
-    lv_obj_align(sub, LV_ALIGN_CENTER, 0, 24);
+    // Logo: A8 alpha image (tools/gen_splash.py), recolored white
+    lv_obj_t *logo = lv_img_create(pwr_splash_scr);
+    lv_img_set_src(logo, &splash_logo);
+    lv_obj_set_style_img_recolor(logo, lv_color_white(), 0);
+    lv_obj_set_style_img_recolor_opa(logo, LV_OPA_COVER, 0);
+#if SCREEN_W != 800
+    lv_img_set_zoom(logo, (uint16_t)(256 * SCREEN_W / 800));   // keep 70 % width
+#endif
+    lv_obj_center(logo);
 
     // NOTE: Do NOT call lv_refr_now() here — it hangs the task
     // due to RGB LCD bounce buffer DMA contention. Let the normal
@@ -3776,7 +3801,6 @@ void can_hmi_task(void *arg)
                         uint8_t code = get_popup_error_code();
                         if (code != 0) {
                             show_error_popup(code);
-                            buzzer_alarm();
                         }
                     }
 

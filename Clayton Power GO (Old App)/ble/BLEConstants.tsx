@@ -1,0 +1,11 @@
+export const CP_SERVICE = {
+    CLAYTON: '0783b03e-8535-b5a0-7140-a304d2495cb7',
+    CLAYTON_COMM: '0783b03e-8535-b5a0-7140-a304d2495cb7'
+};
+
+export const CP_CHARACTERISTIC = {
+    CLAYTON_SEND: '0783b03e-8535-b5a0-7140-a304d2495cba',
+    CLAYTON_LISTEN: '0783b03e-8535-b5a0-7140-a304d2495cb8'
+};
+
+// minicom -D /dev/tty.usbserial-1421200 -b 921600

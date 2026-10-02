@@ -1,0 +1,539 @@
+{
+  "navigation": {
+    "deviceList": "Apparatenlijst",
+    "deviceDetails": "Apparaatdetails",
+    "ignoredErrors": "Genegeerde fouten",
+    "settings": "Instellingen"
+  },
+  "deviceList": {
+    "availableDevices": "Beschikbare apparaten",
+    "connect": "Verbinden",
+    "view": "Bekijken",
+    "disconnect": "Verbreken",
+    "remove": "Verwijderen",
+    "scanning": "Zoeken...",
+    "noDevicesFound": "Geen apparaten gevonden",
+    "connectionFailed": "Verbinding mislukt; niet navigeren."
+  },
+  "deviceInfo": {
+    "batteryLevel": "Batterijniveau",
+    "serialNumber": "Serienummer",
+    "bluetoothName": "Bluetooth-naam",
+    "connectionStatus": "Verbindingsstatus",
+    "connected": "Verbonden",
+    "disconnected": "Losgekoppeld",
+    "connecting": "Verbinden...",
+    "firmwareVersion": "Firmwareversie",
+    "hardwareVersion": "Hardwareversie",
+    "dcInput": "DC IN",
+    "grid": "Net",
+    "solar": "Zonne-energie",
+    "errors": "Fouten ({{count}})",
+    "warning": "Waarschuwing",
+    "errorCode": "Foutcode",
+    "clearAll": "Alles wissen",
+    "ignore": "Negeren"
+  },
+  "settings": {
+    "title": "Instellingen",
+    "language": "Taal",
+    "selectLanguage": "Taal selecteren",
+    "languageDescription": "Kies uw gewenste taal voor de app-interface",
+    "preferences": "Voorkeuren",
+    "errorCodes": "Foutcodes",
+    "viewAllErrors": "Alle foutcodes bekijken",
+    "english": "English",
+    "french": "Français",
+    "german": "Deutsch",
+    "danish": "Dansk",
+    "swedish": "Svenska",
+    "dutch": "Nederlands",
+    "spanish": "Español"
+  },
+  "errorCodesList": {
+    "title": "Foutcodes",
+    "searchPlaceholder": "Zoek foutcodes...",
+    "noResultsTitle": "Geen foutcodes gevonden",
+    "noResultsSubtext": "Probeer uw zoektermen aan te passen",
+    "errorPrefix": "Fout"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Annuleren",
+    "save": "Opslaan",
+    "loading": "Laden...",
+    "error": "Fout",
+    "success": "Succes",
+    "confirm": "Bevestigen",
+    "delete": "Verwijderen",
+    "edit": "Bewerken",
+    "back": "Terug",
+    "next": "Volgende",
+    "retry": "Opnieuw proberen"
+  },
+  "errors": {
+    "connectionError": "Verbindingsfout",
+    "deviceNotFound": "Apparaat niet gevonden",
+    "bluetoothDisabled": "Bluetooth is uitgeschakeld",
+    "permissionDenied": "Toestemming geweigerd",
+    "unknownError": "Er is een onbekende fout opgetreden"
+  },
+  "deviceErrors": {
+    "1": {
+      "name": "EEPROM",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "2": {
+      "name": "EEPROM",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "3": {
+      "name": "Hoogspanning",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "4": {
+      "name": "Temperatuur",
+      "description": "Apparaat wordt te koud. Laat het opwarmen of plaats het in een hogere omgevingstemperatuur."
+    },
+    "5": {
+      "name": "Temperatuur",
+      "description": "Apparaat is te koud. Laat het opwarmen of plaats het in een hogere omgevingstemperatuur."
+    },
+    "6": {
+      "name": "Temperatuur",
+      "description": "Apparaat wordt te heet. Laat het afkoelen of plaats het in een lagere omgevingstemperatuur."
+    },
+    "7": {
+      "name": "Temperatuur",
+      "description": "Apparaat is te heet. Laat het afkoelen of plaats het in een lagere omgevingstemperatuur."
+    },
+    "8": {
+      "name": "Kapotte sensor",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "9": {
+      "name": "Kapotte sensor",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "10": {
+      "name": "Efficiëntie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "11": {
+      "name": "IO overbelasting",
+      "description": "Koppel de IO (REMOTE) connector los en controleer de connector of kabel op beschadiging. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "12": {
+      "name": "IO overbelasting",
+      "description": "Koppel de IO (DATA) connector los en controleer de connector of kabel op beschadiging. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "13": {
+      "name": "IO overbelasting",
+      "description": "Koppel de IO-connector (voorkant) los en controleer de connector of kabel op beschadiging. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "14": {
+      "name": "IO overbelasting",
+      "description": "Koppel IO (C2) connector los en controleer de connector of kabel op beschadiging. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "20": {
+      "name": "230VAC overbelasting",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "22": {
+      "name": "Lader",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "23": {
+      "name": "Lader",
+      "description": "Verwijder de 230 VAC aansluitingen en sluit ze opnieuw aan om verder op te laden. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "30": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "31": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "32": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "33": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "34": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "35": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "36": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "37": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "38": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "39": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "40": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "41": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "42": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "43": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "44": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "45": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "46": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "47": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "48": {
+      "name": "Kalibratie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "50": {
+      "name": "Lege accu",
+      "description": "Accu is diep ontladen, neem contact op met uw verkoper voor ondersteuning."
+    },
+    "51": {
+      "name": "Lege accu",
+      "description": "Accu is leeg. Laad het apparaat op."
+    },
+    "52": {
+      "name": "Accu bijna leeg",
+      "description": "Accu bijna leeg. Laad het apparaat op."
+    },
+    "53": {
+      "name": "Lege accu",
+      "description": "Accu is leeg. Laad het apparaat op."
+    },
+    "54": {
+      "name": "Balans",
+      "description": "Celbalancering wordt uitgevoerd. Als er na 24 uur nog steeds een waarschuwing wordt gegeven, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "55": {
+      "name": "Balans",
+      "description": "Celbalancering wordt uitgevoerd. Als er na 24 uur nog steeds een storing is, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "56": {
+      "name": "Temperatuur",
+      "description": "Apparaat wordt te koud. Laat het opwarmen of plaats het in een hogere omgevingstemperatuur."
+    },
+    "57": {
+      "name": "Temperatuur",
+      "description": "Apparaat is te koud. Laat het opwarmen of plaats het in een hogere omgevingstemperatuur."
+    },
+    "58": {
+      "name": "Temperatuur",
+      "description": "Apparaat wordt te heet. Laat het afkoelen of plaats het in een lagere omgevingstemperatuur."
+    },
+    "59": {
+      "name": "Temperatuur",
+      "description": "Apparaat is te heet. Laat het afkoelen of plaats het in een lagere omgevingstemperatuur."
+    },
+    "60": {
+      "name": "Lege accu",
+      "description": "Accu is leeg. Laad het apparaat op."
+    },
+    "61": {
+      "name": "Accu ontlaadstroom",
+      "description": "Accu wordt ontladen met een te hoge stroomsterkte. Verwijder alle 230 VAC en 12 VDC belastingen. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "62": {
+      "name": "Accu laadstroom",
+      "description": "Accu wordt opgeladen met een te hoge stroomsterkte.  Ontkoppel alle laadbronnen (Solar, DC, AC). Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "70": {
+      "name": "Zonne-energie",
+      "description": "Controleer of de zonne-installatie correct is en of het zonnepaneel een spanning van maximaal 50 V levert."
+    },
+    "71": {
+      "name": "Zonne-energie",
+      "description": "Controleer of de zonne-installatie correct is en of het zonnepaneel de maximale stroom levert."
+    },
+    "72": {
+      "name": "Zonne-energie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "73": {
+      "name": "Zekering zonne-energie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "74": {
+      "name": "Zonne-energie",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "75": {
+      "name": "Zonne-energie zelfbescherming",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "88": {
+      "name": "12VDC UIT overbelasting",
+      "description": "12 VDC uitgang overbelast. Verwijder de belasting om uitschakeling te voorkomen."
+    },
+    "89": {
+      "name": "Jump Start fout",
+      "description": "Jump Start is gestopt."
+    },
+    "90": {
+      "name": "Laag 12VDC IN",
+      "description": "DC-ingangsspanning te laag voor opladen. Controleer de accuspanning van het voertuig."
+    },
+    "91": {
+      "name": "Hoog 12VDC IN",
+      "description": "DC-ingangsspanning te hoog voor opladen.  Controleer de accuspanning van het voertuig."
+    },
+    "92": {
+      "name": "DC-ingangsspanning laag",
+      "description": "DC/DC-omvormer loopt niet vanwege lage spanning"
+    },
+    "93": {
+      "name": "12 VDC opladen",
+      "description": "Kan niet opladen vanuit het voertuig, controleer de installatie op de accu van het voertuig. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "94": {
+      "name": "12VDC UIT relais",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "95": {
+      "name": "12VDC UIT relais",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "96": {
+      "name": "12VDC UIT overbelasting",
+      "description": "Laadstroom 12 VDC output te hoog. Controleer de installatie van het voertuig."
+    },
+    "97": {
+      "name": "12VDC UIT overbelasting",
+      "description": "Verwijder de 12 VDC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "101": {
+      "name": "AC-offset",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "102": {
+      "name": "DC-offset",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "105": {
+      "name": "Hoogspanning",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "120": {
+      "name": "12VDC opladen",
+      "description": "Druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "121": {
+      "name": "Communicatie",
+      "description": "Controleer de CAN-kabels. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "122": {
+      "name": "Temperatuur",
+      "description": "Apparaat wordt te heet. Laat het afkoelen of plaats het in een lagere omgevingstemperatuur."
+    },
+    "123": {
+      "name": "Temperatuur",
+      "description": "Apparaat is te heet. Laat het afkoelen of plaats het in een lagere omgevingstemperatuur."
+    },
+    "124": {
+      "name": "12VDC opladen",
+      "description": "12 VDC ingangsspanning te hoog voor opladen. Controleer de installatie van het voertuig."
+    },
+    "125": {
+      "name": "12VDC opladen",
+      "description": "Druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "126": {
+      "name": "12VDC opladen",
+      "description": "Druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "127": {
+      "name": "12VDC opladen",
+      "description": "Druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "130": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "131": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "132": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "133": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "135": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "136": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "137": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "138": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "139": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "140": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "141": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "142": {
+      "name": "Voeding",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "150": {
+      "name": "230VAC overbelasting",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "151": {
+      "name": "230VAC overbelasting",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "152": {
+      "name": "230VAC overbelasting",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "153": {
+      "name": "PE/N relais",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "154": {
+      "name": "PE/N relais",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "155": {
+      "name": "230VAC overbelasting",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "156": {
+      "name": "AC output",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "200": {
+      "name": "230VAC IN piek",
+      "description": "Druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "202": {
+      "name": "Hoogspanning",
+      "description": "Druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "203": {
+      "name": "230VAC overbelasting",
+      "description": "Verwijder de 230 VAC belasting en druk op < WISSEN > om het apparaat opnieuw op te starten. Als het probleem met een herstart niet wordt verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "204": {
+      "name": "Transferrelais",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "205": {
+      "name": "Transferrelais",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "206": {
+      "name": "230VAC IN laagspanning",
+      "description": "230 VAC ingangsspanning te laag. Controleer de voedingskabels, verwijder het verlengsnoer of probeer een ander stopcontact. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "207": {
+      "name": "230VAC IN hoogspanning",
+      "description": "230 VAC ingangsspanning te hoog. Controleer de netvoeding."
+    },
+    "208": {
+      "name": "AC input",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "223": {
+      "name": "Communicatie",
+      "description": "Controleer de CAN-kabels. Als het probleem daarmee niet is verholpen, neem dan contact op met uw verkoper voor ondersteuning."
+    },
+    "240": {
+      "name": "Systeem vergrendeld",
+      "description": "Celspanning kritisch laag, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "241": {
+      "name": "Systeem vergrendeld",
+      "description": "Celspanning kritisch hoog, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "242": {
+      "name": "Systeem vergrendeld",
+      "description": "Accuspanning kritisch laag, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "243": {
+      "name": "Systeem vergrendeld",
+      "description": "Accuspanning kritisch hoog, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "244": {
+      "name": "Systeem vergrendeld",
+      "description": "Temperatuur kritisch laag, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "245": {
+      "name": "Systeem vergrendeld",
+      "description": "Temperatuur kritisch hoog, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "246": {
+      "name": "Systeem vergrendeld",
+      "description": "Laadstroom kritisch hoog, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "247": {
+      "name": "Systeem vergrendeld",
+      "description": "Ontlaadstroom kritisch hoog, apparaat vergrendeld. Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "ErrorUnknown": {
+      "name": "Fout",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    },
+    "rrorUnknown": {
+      "name": "Fout",
+      "description": "Neem contact op met uw verkoper voor ondersteuning."
+    }
+  }
+}

@@ -1,0 +1,530 @@
+{
+  "navigation": {
+    "deviceList": "Device List",
+    "deviceDetails": "Device Details",
+    "ignoredErrors": "Ignored Errors",
+    "settings": "Settings"
+  },
+  "deviceList": {
+    "availableDevices": "Available devices",
+    "connect": "Connect",
+    "view": "View",
+    "disconnect": "Disconnect",
+    "remove": "Remove",
+    "scanning": "Scanning...",
+    "noDevicesFound": "No devices found",
+    "connectionFailed": "Connection failed; not navigating."
+  },
+  "deviceInfo": {
+    "batteryLevel": "Battery Level",
+    "serialNumber": "Serial Number",
+    "bluetoothName": "Bluetooth Name",
+    "connectionStatus": "Connection Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "firmwareVersion": "Firmware Version",
+    "hardwareVersion": "Hardware Version",
+    "dcInput": "DC IN",
+    "grid": "Grid",
+    "solar": "Solar",
+    "errors": "Errors ({{count}})",
+    "warning": "Warning",
+    "errorCode": "Error Code",
+    "clearAll": "Clear All",
+    "ignore": "Ignore"
+  },
+  "settings": {
+    "title": "Settings",
+    "preferences": "Preferences",
+    "language": "Language",
+    "selectLanguage": "Select Language",
+    "english": "English",
+    "french": "Français",
+    "german": "Deutsch",
+    "danish": "Dansk",
+    "swedish": "Svenska",
+    "dutch": "Nederlands",
+    "spanish": "Español"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "retry": "Retry"
+  },
+  "errors": {
+    "connectionError": "Connection Error",
+    "deviceNotFound": "Device not found",
+    "bluetoothDisabled": "Bluetooth is disabled",
+    "permissionDenied": "Permission denied",
+    "unknownError": "An unknown error occurred"
+  },
+  "notifications": {
+    "lowBatteryTitle": "Low Battery Warning",
+    "lowBatteryBody": "{{deviceName}} has {{batteryLevel}}% battery remaining",
+    "lowBatteryChannelName": "Low Battery Warnings"
+  },
+  "deviceErrors": {
+    "1": {
+      "name": "EEPROM",
+      "description": "Contact your retailer for support."
+    },
+    "2": {
+      "name": "EEPROM",
+      "description": "Contact your retailer for support."
+    },
+    "3": {
+      "name": "High voltage",
+      "description": "Contact your retailer for support."
+    },
+    "4": {
+      "name": "Temperature",
+      "description": "Unit is getting too cold. Allow it to warm up or place it in higher ambient temperature."
+    },
+    "5": {
+      "name": "Temperature",
+      "description": "Unit is too cold. Allow it to warm up or place it in higher ambient temperature."
+    },
+    "6": {
+      "name": "Temperature",
+      "description": "Unit is getting too hot. Allow it to cool down or place it in a lower ambient temperature."
+    },
+    "7": {
+      "name": "Temperature",
+      "description": "Unit is too hot. Allow it to cool down or place it in a lower ambient temperature."
+    },
+    "8": {
+      "name": "Broken sensor",
+      "description": "Contact your retailer for support."
+    },
+    "9": {
+      "name": "Broken sensor",
+      "description": "Contact your retailer for support."
+    },
+    "10": {
+      "name": "Efficiency",
+      "description": "Contact your retailer for support."
+    },
+    "11": {
+      "name": "IO overload",
+      "description": "Disconnect IO (REMOTE) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support."
+    },
+    "12": {
+      "name": "IO overload",
+      "description": "Disconnect IO (DATA) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support."
+    },
+    "13": {
+      "name": "IO overload",
+      "description": "Disconnect IO (FRONT) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support."
+    },
+    "14": {
+      "name": "IO overload",
+      "description": "Disconnect IO (C2) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support."
+    },
+    "20": {
+      "name": "230VAC overload",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "22": {
+      "name": "Charger",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "23": {
+      "name": "Charger",
+      "description": "Remove 230 VAC connections and reconnect to continue charging. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "30": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "31": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "32": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "33": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "34": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "35": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "36": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "37": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "38": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "39": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "40": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "41": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "42": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "43": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "44": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "45": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "46": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "47": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "48": {
+      "name": "Calibration",
+      "description": "Contact your retailer for support."
+    },
+    "50": {
+      "name": "Empty Battery",
+      "description": "Battery is deep-discharged, contact your retailer for support."
+    },
+    "51": {
+      "name": "Empty battery",
+      "description": "Battery is empty. Charge the unit."
+    },
+    "52": {
+      "name": "Low battery",
+      "description": "Battery is low. Charge the unit."
+    },
+    "53": {
+      "name": "Empty battery",
+      "description": "Battery is empty. Charge the unit."
+    },
+    "54": {
+      "name": "Balancing",
+      "description": "Cell balancing in progress. If warning remains after 24 hrs, then contact your retailer for support."
+    },
+    "55": {
+      "name": "Balancing",
+      "description": "Cell balancing in progress. If failure remains after 24 hrs, then contact your retailer for support."
+    },
+    "56": {
+      "name": "Temperature",
+      "description": "Unit is getting too cold. Allow it to warm up or place it in higher ambient temperature."
+    },
+    "57": {
+      "name": "Temperature",
+      "description": "Unit is too cold. Allow it to warm up or place it in higher ambient temperature."
+    },
+    "58": {
+      "name": "Temperature",
+      "description": "Unit is getting too hot. Allow it to cool down or place it in a lower ambient temperature."
+    },
+    "59": {
+      "name": "Temperature",
+      "description": "Unit is too hot. Allow it to cool down or place it in a lower ambient temperature."
+    },
+    "60": {
+      "name": "Empty battery",
+      "description": "Battery is empty. Charge the unit."
+    },
+    "61": {
+      "name": "Battery Discharge Current",
+      "description": "Battery is being discharged with too high current. Remove any 230 VAC and 12 VDC load. If that does not remove the failure, then contact your retailer for support."
+    },
+    "62": {
+      "name": "Battery Charge Current",
+      "description": "Battery is being charged with too high current.  Disconnect all charge sources (Solar, DC, AC). If that does not remove the failure, then contact your retailer for support."
+    },
+    "70": {
+      "name": "Solar",
+      "description": "Check for correct solar installation and a voltage of maximum 50 V from solar panel."
+    },
+    "71": {
+      "name": "Solar",
+      "description": "Solar output current is measured above 50A"
+    },
+    "72": {
+      "name": "Solar",
+      "description": "Contact your retailer for support."
+    },
+    "73": {
+      "name": "Solar Fuse",
+      "description": "Contact your retailer for support."
+    },
+    "74": {
+      "name": "Solar",
+      "description": "Contact your retailer for support."
+    },
+    "75": {
+      "name": "Solar Self Protect",
+      "description": "Contact your retailer for support."
+    },
+    "88": {
+      "name": "12VDC OUT overload",
+      "description": "12 VDC output overloaded. Remove load to avoid shutdown."
+    },
+    "89": {
+      "name": "Jump Start failure",
+      "description": "Jump Start has been stopped."
+    },
+    "90": {
+      "name": "Low 12VDC IN",
+      "description": "DC input voltage too low for charging. Check vehicle battery voltage."
+    },
+    "91": {
+      "name": "High 12VDC IN",
+      "description": "DC input voltage too high for charging.  Check vehicle battery voltage."
+    },
+    "92": {
+      "name": "DC Input Voltage Low",
+      "description": "DC/DC Converter is not running caused by low voltage"
+    },
+    "93": {
+      "name": "12VDC charging",
+      "description": "Unable to charge from vehicle, check installation to vehicle battery. If that does not remove the failure, then contact your retailer for support."
+    },
+    "94": {
+      "name": "12VDC OUT relay",
+      "description": "Contact your retailer for support."
+    },
+    "95": {
+      "name": "12VDC OUT relay",
+      "description": "Contact your retailer for support."
+    },
+    "96": {
+      "name": "12VDC OUT overload",
+      "description": "12 VDC output charge current too high. Check vehicle installation."
+    },
+    "97": {
+      "name": "12VDC OUT overload",
+      "description": "Remove 12 VDC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "101": {
+      "name": "AC offset",
+      "description": "Contact your retailer for support."
+    },
+    "102": {
+      "name": "DC offset",
+      "description": "Contact your retailer for support."
+    },
+    "105": {
+      "name": "High voltage",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "120": {
+      "name": "12VDC charging",
+      "description": "Press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "121": {
+      "name": "Communication",
+      "description": "Check CAN cables. If that does not remove the failure, then contact your retailer for support."
+    },
+    "122": {
+      "name": "Temperature",
+      "description": "Unit is getting too hot. Allow it to cool down or place it in a lower ambient temperature."
+    },
+    "123": {
+      "name": "Temperature",
+      "description": "Unit is too hot. Allow it to cool down or place it in a lower ambient temperature."
+    },
+    "124": {
+      "name": "12VDC charging",
+      "description": "12 VDC input voltage too high for charging. Check vehicle installation."
+    },
+    "125": {
+      "name": "12VDC charging",
+      "description": "Press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "126": {
+      "name": "12VDC charging",
+      "description": "Press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "127": {
+      "name": "12VDC charging",
+      "description": "Press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "130": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "131": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "132": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "133": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "135": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "136": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "137": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "138": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "139": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "140": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "141": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "142": {
+      "name": "Power supply",
+      "description": "Contact your retailer for support."
+    },
+    "150": {
+      "name": "230VAC overload",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "151": {
+      "name": "230VAC overload",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "152": {
+      "name": "230VAC overload",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "153": {
+      "name": "PE/N relay",
+      "description": "Contact your retailer for support."
+    },
+    "154": {
+      "name": "PE/N relay",
+      "description": "Contact your retailer for support."
+    },
+    "155": {
+      "name": "230VAC overload",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "156": {
+      "name": "AC Output",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "200": {
+      "name": "230VAC IN peak",
+      "description": "Press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "202": {
+      "name": "High voltage",
+      "description": "Press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "203": {
+      "name": "230VAC overload",
+      "description": "Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support."
+    },
+    "204": {
+      "name": "Transfer relay",
+      "description": "Contact your retailer for support."
+    },
+    "205": {
+      "name": "Transfer relay",
+      "description": "Contact your retailer for support."
+    },
+    "206": {
+      "name": "230VAC IN low voltage",
+      "description": "230AC IN voltage too low. Check supply cables, remove extension cord or try another outlet socket. If that does not remove the failure, then contact your retailer for support."
+    },
+    "207": {
+      "name": "230VAC IN high voltage",
+      "description": "230AC IN voltage too high. Check mains supply."
+    },
+    "208": {
+      "name": "AC Input",
+      "description": "Contact your retailer for support."
+    },
+    "223": {
+      "name": "Communication",
+      "description": "Check CAN cables. If that does not remove the failure, then contact your retailer for support."
+    },
+    "240": {
+      "name": "System locked",
+      "description": "Cell voltage critical low, unit locked. Contact your retailer for support."
+    },
+    "241": {
+      "name": "System locked",
+      "description": "Cell voltage critical high, unit locked. Contact your retailer for support."
+    },
+    "242": {
+      "name": "System locked",
+      "description": "Battery voltage critical low, unit locked. Contact your retailer for support."
+    },
+    "243": {
+      "name": "System locked",
+      "description": "Battery voltage critical high, unit locked. Contact your retailer for support."
+    },
+    "244": {
+      "name": "System locked",
+      "description": "Temperature critical low, unit locked. Contact your retailer for support."
+    },
+    "245": {
+      "name": "System locked",
+      "description": "Temperature critical high, unit locked. Contact your retailer for support."
+    },
+    "246": {
+      "name": "System locked",
+      "description": "Charge current critical high, unit locked. Contact your retailer for support."
+    },
+    "247": {
+      "name": "System locked",
+      "description": "Discharge current critical high, unit locked. Contact your retailer for support."
+    },
+    "ErrorUnknown": {
+      "name": "Error",
+      "description": "Contact your retailer for support."
+    }
+  }
+}

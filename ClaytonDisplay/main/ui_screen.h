@@ -36,6 +36,16 @@
 /** 1 on the small panel - selects the compact UI variants. */
 #define UI_COMPACT  (!UI_PANEL_1024_600)
 
+/* ===== Board switch: 0 = Waveshare ESP32-S3-Touch-LCD-5 (CH422G expander),
+ *                     1 = Clayton "New Display" PCB (PCA9554 expander, CAN_S,
+ *                         buzzer via RTC CLKOUT, single-wire on UART0).
+ * The ESP32 pin map (RGB bus, sync, I2C, touch IRQ, SPI, CAN, USB) is
+ * IDENTICAL on both boards — only the IO-expander world differs.
+ * See docs/"New Display - Netlist" and memory note new-display-pcb. */
+#ifndef BOARD_CP_DISPLAY
+#define BOARD_CP_DISPLAY  (1)
+#endif
+
 /* ===== Skin switch: 0 = classic "Midnight" dashboard (dashboard_ui.c),
  *                    1 = "Carbon Blue" instrument skin (dashboard_carbon.c).
  * Both files implement the same dashboard_ui.h API; exactly one is compiled

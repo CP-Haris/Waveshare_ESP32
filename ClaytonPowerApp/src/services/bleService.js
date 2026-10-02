@@ -6,6 +6,12 @@ import {
   decodeNotification,
 } from '../utils/protocol';
 
+// Time allowed for the user to read the PIN off the display and type it in.
+const PAIRING_TIMEOUT_MS = 45000;
+const PAIRING_RETRY_MS = 1000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 class BleService {
   constructor() {
     this.manager = new BleManager();
@@ -90,11 +96,48 @@ class BleService {
     this.scanning = false;
   }
 
+  // The TX characteristic requires an encrypted (bonded) link. On a first
+  // connection the display starts pairing and Android shows the PIN dialog;
+  // reads fail until the user has entered the PIN, and the link may drop and
+  // need a reconnect. Keep retrying until the bond is in place or we give up.
+  async _connectAndAuthenticate(deviceId) {
+    const deadline = Date.now() + PAIRING_TIMEOUT_MS;
+    let lastError = null;
+
+    while (Date.now() < deadline) {
+      let device = null;
+      try {
+        device = await this.manager.connectToDevice(deviceId, { requestMTU: 256 });
+        await device.discoverAllServicesAndCharacteristics();
+
+        while (Date.now() < deadline) {
+          try {
+            await device.readCharacteristicForService(BLE_SERVICE_UUID, BLE_TX_CHAR_UUID);
+            return device;
+          } catch (readError) {
+            lastError = readError;
+            if (!(await device.isConnected())) break; // link dropped: reconnect
+            await sleep(PAIRING_RETRY_MS);
+          }
+        }
+      } catch (error) {
+        lastError = error;
+      }
+
+      try {
+        await this.manager.cancelDeviceConnection(deviceId);
+      } catch (cancelError) {
+        // already disconnected
+      }
+      await sleep(PAIRING_RETRY_MS);
+    }
+
+    throw lastError || new Error('Pairing timed out');
+  }
+
   async connect(deviceId) {
     try {
-      const device = await this.manager.connectToDevice(deviceId, {
-        requestMTU: 256,
-      });
+      const device = await this._connectAndAuthenticate(deviceId);
       this.device = device;
 
       try {
@@ -111,9 +154,6 @@ class BleService {
         this.clearCommandLock();
         this._emitConnection(false);
       });
-
-      await device.discoverAllServicesAndCharacteristics();
-      await device.readCharacteristicForService(BLE_SERVICE_UUID, BLE_TX_CHAR_UUID);
 
       this._subscription = device.monitorCharacteristicForService(
         BLE_SERVICE_UUID,

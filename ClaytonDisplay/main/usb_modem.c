@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "rtc_pcf85063.h"
+#include "waveshare_rgb_lcd_port.h"   // waveshare_i2c_diag (SC command)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -390,6 +391,23 @@ static void console_handle_line(const char *line, size_t len)
         } else {
             ESP_LOGW(TAG, "TS failed — expected TS YYYYMMDDHHMMSS");
         }
+        return;
+    }
+    if (len >= 2 && line[0] == 'S' && line[1] == 'C') {
+        // Bring-up diagnostics: I2C bus scan + IO-expander register dump
+        waveshare_i2c_diag();
+        return;
+    }
+    if (len >= 3 && line[0] == 'B' && line[1] == 'Z') {
+        // Buzzer test: BZW = warning, BZF = failure, BZC = critical, BZK = click
+        switch (line[2]) {
+        case 'W': waveshare_buzzer_alarm(BUZZ_WARNING);  break;
+        case 'F': waveshare_buzzer_alarm(BUZZ_FAILURE);  break;
+        case 'C': waveshare_buzzer_alarm(BUZZ_CRITICAL); break;
+        case 'K': waveshare_buzzer_click();           break;
+        default:  ESP_LOGW(TAG, "BZ? use BZW / BZF / BZC / BZK"); return;
+        }
+        ESP_LOGI(TAG, "buzzer test %c", line[2]);
         return;
     }
 }

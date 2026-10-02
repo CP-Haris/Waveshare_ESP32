@@ -1,0 +1,539 @@
+{
+  "navigation": {
+    "deviceList": "Geräteliste",
+    "deviceDetails": "Gerätedetails",
+    "ignoredErrors": "Ignorierte Fehler",
+    "settings": "Einstellungen"
+  },
+  "deviceList": {
+    "availableDevices": "Verfügbare Geräte",
+    "connect": "Verbinden",
+    "view": "Anzeigen",
+    "disconnect": "Trennen",
+    "remove": "Entfernen",
+    "scanning": "Suche läuft...",
+    "noDevicesFound": "Keine Geräte gefunden",
+    "connectionFailed": "Verbindung fehlgeschlagen; Navigation abgebrochen."
+  },
+  "deviceInfo": {
+    "batteryLevel": "Batteriestand",
+    "serialNumber": "Seriennummer",
+    "bluetoothName": "Bluetooth-Name",
+    "connectionStatus": "Verbindungsstatus",
+    "connected": "Verbunden",
+    "disconnected": "Getrennt",
+    "connecting": "Verbinde...",
+    "firmwareVersion": "Firmware-Version",
+    "hardwareVersion": "Hardware-Version",
+    "dcInput": "DC Eingang",
+    "grid": "Netz",
+    "solar": "Solar",
+    "errors": "Fehler ({{count}})",
+    "warning": "Warnung",
+    "errorCode": "Fehlercode",
+    "clearAll": "Alle löschen",
+    "ignore": "Ignorieren"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "language": "Sprache",
+    "selectLanguage": "Sprache auswählen",
+    "languageDescription": "Wählen Sie Ihre bevorzugte Sprache für die App-Oberfläche",
+    "preferences": "Einstellungen",
+    "errorCodes": "Fehlercodes",
+    "viewAllErrors": "Alle Fehlercodes anzeigen",
+    "english": "English",
+    "french": "Français",
+    "german": "Deutsch",
+    "danish": "Dansk",
+    "swedish": "Svenska",
+    "dutch": "Nederlands",
+    "spanish": "Español"
+  },
+  "errorCodesList": {
+    "title": "Fehlercodes",
+    "searchPlaceholder": "Fehlercodes suchen...",
+    "noResultsTitle": "Keine Fehlercodes gefunden",
+    "noResultsSubtext": "Versuchen Sie, Ihre Suchbegriffe anzupassen",
+    "errorPrefix": "Fehler"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "loading": "Laden...",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "confirm": "Bestätigen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "back": "Zurück",
+    "next": "Weiter",
+    "retry": "Wiederholen"
+  },
+  "errors": {
+    "connectionError": "Verbindungsfehler",
+    "deviceNotFound": "Gerät nicht gefunden",
+    "bluetoothDisabled": "Bluetooth ist deaktiviert",
+    "permissionDenied": "Berechtigung verweigert",
+    "unknownError": "Ein unbekannter Fehler ist aufgetreten"
+  },
+  "deviceErrors": {
+    "1": {
+      "name": "EEPROM",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "2": {
+      "name": "EEPROM",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "3": {
+      "name": "Hochspannung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "4": {
+      "name": "Temperatur",
+      "description": "Das Gerät nähert sich einer zu niedrigen Temperatur. Aufwärmen lassen oder an einen Ort mit einer höheren Umgebungstemperatur stellen."
+    },
+    "5": {
+      "name": "Temperatur",
+      "description": "Das Gerät hat eine zu niedrige Temperatur. Aufwärmen lassen oder an einen Ort mit einer höheren Umgebungstemperatur stellen."
+    },
+    "6": {
+      "name": "Temperatur",
+      "description": "Das Gerät nähert sich einer zu hohen Temperatur. Abkühlen lassen oder an einen Ort mit einer niedrigeren Umgebungstemperatur stellen."
+    },
+    "7": {
+      "name": "Temperatur",
+      "description": "Das Gerät hat eine zu hohe Temperatur. Abkühlen lassen oder an einen Ort mit einer niedrigeren Umgebungstemperatur stellen."
+    },
+    "8": {
+      "name": "Sensor defekt",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "9": {
+      "name": "Sensor defekt",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "10": {
+      "name": "Wirkungsgrad",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "11": {
+      "name": "IO-Überlast",
+      "description": "IO-Steckverbinder (REMOTE) trennen, Stecker und Kabel auf Beschädigung überprüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "12": {
+      "name": "IO-Überlast",
+      "description": "IO-Steckverbinder (DATA) trennen, Stecker und Kabel auf Beschädigung überprüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "13": {
+      "name": "IO-Überlast",
+      "description": "IO-Steckverbinder (front) trennen, Stecker und Kabel auf Beschädigung überprüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "14": {
+      "name": "IO-Überlast",
+      "description": "IO-Steckverbinder (C2) trennen, Stecker und Kabel auf Beschädigung überprüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "20": {
+      "name": "230VAC Überlast",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "22": {
+      "name": "Ladegerät",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "23": {
+      "name": "Ladegerät",
+      "description": "230-VAC-Anschlüsse lösen und erneut anschließen, um den Ladevorgang fortzusetzen. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "30": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "31": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "32": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "33": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "34": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "35": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "36": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "37": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "38": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "39": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "40": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "41": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "42": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "43": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "44": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "45": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "46": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "47": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "48": {
+      "name": "Kalibrierung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "50": {
+      "name": "Leerer Akku",
+      "description": "Der Akku ist tiefentladen. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "51": {
+      "name": "Leerer Akku",
+      "description": "Der Akku ist leer. Laden Sie das Gerät auf."
+    },
+    "52": {
+      "name": "Akku niedrig",
+      "description": "Akkustand niedrig. Laden Sie das Gerät auf."
+    },
+    "53": {
+      "name": "Leerer Akku",
+      "description": "Der Akku ist leer. Laden Sie das Gerät auf."
+    },
+    "54": {
+      "name": "Ausgleich läuft",
+      "description": "Zellausgleich läuft. Wird die Warnung nach 24 Stunden immer noch angezeigt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "55": {
+      "name": "Ausgleich läuft",
+      "description": "Zellausgleich läuft. Wird der Fehler nach 24 Stunden immer noch angezeigt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "56": {
+      "name": "Temperatur",
+      "description": "Das Gerät nähert sich einer zu niedrigen Temperatur. Aufwärmen lassen oder an einen Ort mit einer höheren Umgebungstemperatur stellen."
+    },
+    "57": {
+      "name": "Temperatur",
+      "description": "Das Gerät hat eine zu niedrige Temperatur. Aufwärmen lassen oder an einen Ort mit einer höheren Umgebungstemperatur stellen."
+    },
+    "58": {
+      "name": "Temperatur",
+      "description": "Das Gerät nähert sich einer zu hohen Temperatur. Abkühlen lassen oder an einen Ort mit einer niedrigeren Umgebungstemperatur stellen."
+    },
+    "59": {
+      "name": "Temperatur",
+      "description": "Das Gerät hat eine zu hohe Temperatur. Abkühlen lassen oder an einen Ort mit einer niedrigeren Umgebungstemperatur stellen."
+    },
+    "60": {
+      "name": "Leerer Akku",
+      "description": "Der Akku ist leer. Laden Sie das Gerät auf."
+    },
+    "61": {
+      "name": "Akku-Entladestrom",
+      "description": "Der Akku wird mit zu hohem Strom entladen. 230-VAC- und 12-VDC-Lasten entfernen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "62": {
+      "name": "Akku-Ladestrom",
+      "description": "Der Akku wird mit zu hohem Strom geladen.  Alle Ladequellen trennen (Solar, DC, AC). Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "70": {
+      "name": "Solar",
+      "description": "Prüfen, ob die Solarinstallation korrekt ausgeführt ist und die Spannung vom Solarmodul maximal 50 V beträgt."
+    },
+    "71": {
+      "name": "Solar",
+      "description": "Prüfen, ob die Solarinstallation korrekt ausgeführt ist und maximale Stromstärke vom Solarmodul kotrollieren."
+    },
+    "72": {
+      "name": "Solar",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "73": {
+      "name": "Solar-Sicherung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "74": {
+      "name": "Solar",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "75": {
+      "name": "Solar-Selbstschutz",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "88": {
+      "name": "12VDC OUT Überlast",
+      "description": "12-VDC-Ausgang überlastet. Last entfernen, um eine Abschaltung zu vermeiden."
+    },
+    "89": {
+      "name": "Starthilfe-Fehler",
+      "description": "Starthilfe wurde gestoppt."
+    },
+    "90": {
+      "name": "12VDC IN Nieder",
+      "description": "DC-Eingangsspannung zu niedrig zum Laden. Spannung der Fahrzeugbatterie prüfen."
+    },
+    "91": {
+      "name": "12VDC IN Hoch",
+      "description": "DC-Eingangsspannung zu hoch zum Laden.  Spannung der Fahrzeugbatterie prüfen."
+    },
+    "92": {
+      "name": "DC-Eingangsspannung niedrig",
+      "description": "DC/DC-Wandler läuft nicht aufgrund niedriger Spannung"
+    },
+    "93": {
+      "name": "12 V DC ladet",
+      "description": "Ladung über das Fahrzeug nicht möglich, Installation an die Fahrzeugbatterie überprüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "94": {
+      "name": "12VDC OUT-Relais",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "95": {
+      "name": "12VDC OUT-Relais",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "96": {
+      "name": "12VDC OUT Überlast",
+      "description": "12-VDC-Ausgangsladestrom zu hoch. Fahrzeuginstallation prüfen."
+    },
+    "97": {
+      "name": "12VDC OUT Überlast",
+      "description": "12-VDC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "101": {
+      "name": "AC-Offset",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "102": {
+      "name": "DC-Offset",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "105": {
+      "name": "Hochspannung",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "120": {
+      "name": "12 V DC ladet",
+      "description": "Auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "121": {
+      "name": "Kommunikation",
+      "description": "CAN-Kabel prüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "122": {
+      "name": "Temperatur",
+      "description": "Das Gerät nähert sich einer zu hohen Temperatur. Abkühlen lassen oder an einen Ort mit einer niedrigeren Umgebungstemperatur stellen."
+    },
+    "123": {
+      "name": "Temperatur",
+      "description": "Das Gerät hat eine zu hohe Temperatur. Abkühlen lassen oder an einen Ort mit einer niedrigeren Umgebungstemperatur stellen."
+    },
+    "124": {
+      "name": "12VDC ladet",
+      "description": "12-VDC-Eingangsspannung zu hoch zum Laden. Fahrzeuginstallation prüfen."
+    },
+    "125": {
+      "name": "12VDC ladet",
+      "description": "Auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "126": {
+      "name": "12VDC ladet",
+      "description": "Auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "127": {
+      "name": "12VDC ladet",
+      "description": "Auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "130": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "131": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "132": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "133": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "135": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "136": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "137": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "138": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "139": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "140": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "141": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "142": {
+      "name": "Stromversorgung",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "150": {
+      "name": "230VAC Überlast",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "151": {
+      "name": "230VAC Überlast",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "152": {
+      "name": "230VAC Überlast",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "153": {
+      "name": "PE/N-Relais",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "154": {
+      "name": "PE/N-Relais",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "155": {
+      "name": "230VAC Überlast",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "156": {
+      "name": "AC-Ausgang",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "200": {
+      "name": "230VAC IN Spitze",
+      "description": "Auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "202": {
+      "name": "Hochspannung",
+      "description": "Auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "203": {
+      "name": "230VAC Überlast",
+      "description": "230-VAC-Last entfernen und auf < LÖSCHEN > drücken, um das Gerät neu zu starten. Wenn sich der Fehler durch einen Neustart nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "204": {
+      "name": "Übertragungsrelais",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "205": {
+      "name": "Übertragungsrelais",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "206": {
+      "name": "230VAC IN Niederspannung",
+      "description": "230-VAC-Eingangsspannung zu niedrig. Zuleitungen überprüfen, Verlängerungskabel entfernen oder andere Steckdose ausprobieren. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "207": {
+      "name": "230VAC IN Hochspannung",
+      "description": "230-VAC-Eingangsspannung zu hoch. Stromnetz prüfen."
+    },
+    "208": {
+      "name": "AC-Eingang",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "223": {
+      "name": "Kommunikation",
+      "description": "CAN-Kabel prüfen. Wenn sich der Fehler dadurch nicht beheben lässt, wenden Sie sich bitte an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "240": {
+      "name": "System gesperrt",
+      "description": "Zellenspannung kritisch niedrig, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "241": {
+      "name": "System gesperrt",
+      "description": "Zellspannung kritisch hoch, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "242": {
+      "name": "System gesperrt",
+      "description": "Akkuspannung kritisch niedrig, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "243": {
+      "name": "System gesperrt",
+      "description": "Akkuspannung kritisch hoch, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "244": {
+      "name": "System gesperrt",
+      "description": "Temperatur kritisch niedrig, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "245": {
+      "name": "System gesperrt",
+      "description": "Temperatur kritisch hoch, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "246": {
+      "name": "System gesperrt",
+      "description": "Ladestrom kritisch hoch, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "247": {
+      "name": "System gesperrt",
+      "description": "Entladestrom kritisch hoch, Gerät gesperrt. Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "ErrorUnknown": {
+      "name": "Fehler",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    },
+    "rrorUnknown": {
+      "name": "Fehler",
+      "description": "Wenden Sie sich an Ihren Händler, um Unterstützung zu erhalten."
+    }
+  }
+}

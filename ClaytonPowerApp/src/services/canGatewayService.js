@@ -6,6 +6,12 @@ const CAN_DISPLAY_ADDR = 0xfe;
 const CAN_ID_INFO_BROADCAST = 0x18eafffe;
 const BOOTLOADER_ADDR = 0xf0;
 
+// A single identification request can be lost while the display wakes from
+// standby and brings the CAN bus up, so repeat it (like the firmware does)
+// until every unit has reported part and serial number.
+const IDENT_RETRY_MS = 3000;
+const IDENT_MAX_RETRIES = 10;
+
 const CAN_CMD_GET_VAL = 0x40;
 const CAN_CMD_SET_VAL = 0x41;
 const CAN_CMD_GET_MIN = 0x43;
@@ -132,6 +138,8 @@ class CanGatewayService {
     this.passthroughEnabled = false;
     this.passthroughEnabledAt = 0;
     this.enablePromise = null;
+    this.identRetries = 0;
+    this.identRequestedAt = 0;
 
     bleService.onNotification((message) => {
       if (message?.type === 'canFrame') this._handleCanFrame(message.data);
@@ -155,6 +163,8 @@ class CanGatewayService {
     this.passthroughEnabled = false;
     this.passthroughEnabledAt = 0;
     this.enablePromise = null;
+    this.identRetries = 0;
+    this.identRequestedAt = 0;
   }
 
   onNotification(listener) {
@@ -207,14 +217,26 @@ class CanGatewayService {
     if (!enabled) return false;
 
     this._emitExistingUnits();
+    this.identRequestedAt = Date.now();
     await this.sendCan(CAN_ID_INFO_BROADCAST, [0x01, 0xff, 0x00, 0, 0, 0, 0, 0]);
     await this.sendCan(CAN_ID_INFO_BROADCAST, [0x00, 0xff, 0x01, 0, 0, 0, 0, 0]);
     return true;
   }
 
+  _retryIdentificationIfNeeded() {
+    if (this.identRetries >= IDENT_MAX_RETRIES) return;
+    if (Date.now() - this.identRequestedAt < IDENT_RETRY_MS) return;
+    const units = Array.from(this.unitsByAddr.values()).filter((u) => u.addr !== BOOTLOADER_ADDR);
+    const missing = units.length === 0 || units.some((u) => !u.partNumber || !u.serial);
+    if (!missing) return;
+    this.identRetries += 1;
+    this.requestUnits();
+  }
+
   async requestDashboard() {
     const enabled = await this.ensurePassthrough();
     if (!enabled) return false;
+    this._retryIdentificationIfNeeded();
     this._emitActiveDashboard();
     return true;
   }

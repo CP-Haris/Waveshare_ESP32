@@ -1,0 +1,539 @@
+{
+  "navigation": {
+    "deviceList": "Lista de dispositivos",
+    "deviceDetails": "Detalles del dispositivo",
+    "ignoredErrors": "Errores ignorados",
+    "settings": "Configuración"
+  },
+  "deviceList": {
+    "availableDevices": "Dispositivos disponibles",
+    "connect": "Conectar",
+    "view": "Ver",
+    "disconnect": "Desconectar",
+    "remove": "Eliminar",
+    "scanning": "Buscando...",
+    "noDevicesFound": "No se encontraron dispositivos",
+    "connectionFailed": "Conexión fallida; no navegando."
+  },
+  "deviceInfo": {
+    "batteryLevel": "Nivel de batería",
+    "serialNumber": "Número de serie",
+    "bluetoothName": "Nombre Bluetooth",
+    "connectionStatus": "Estado de conexión",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "connecting": "Conectando...",
+    "firmwareVersion": "Versión de firmware",
+    "hardwareVersion": "Versión de hardware",
+    "dcInput": "ENTRADA CC",
+    "grid": "Red",
+    "solar": "Solar",
+    "errors": "Errores ({{count}})",
+    "warning": "Advertencia",
+    "errorCode": "Código de error",
+    "clearAll": "Limpiar todo",
+    "ignore": "Ignorar"
+  },
+  "settings": {
+    "title": "Configuración",
+    "language": "Idioma",
+    "selectLanguage": "Seleccionar idioma",
+    "languageDescription": "Elija su idioma preferido para la interfaz de la aplicación",
+    "preferences": "Preferencias",
+    "errorCodes": "Códigos de error",
+    "viewAllErrors": "Ver todos los códigos de error",
+    "english": "English",
+    "french": "Français",
+    "german": "Deutsch",
+    "danish": "Dansk",
+    "swedish": "Svenska",
+    "dutch": "Nederlands",
+    "spanish": "Español"
+  },
+  "errorCodesList": {
+    "title": "Códigos de error",
+    "searchPlaceholder": "Buscar códigos de error...",
+    "noResultsTitle": "No se encontraron códigos de error",
+    "noResultsSubtext": "Intente ajustar sus términos de búsqueda",
+    "errorPrefix": "Error"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "confirm": "Confirmar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "retry": "Reintentar"
+  },
+  "errors": {
+    "connectionError": "Error de conexión",
+    "deviceNotFound": "Dispositivo no encontrado",
+    "bluetoothDisabled": "Bluetooth está deshabilitado",
+    "permissionDenied": "Permiso denegado",
+    "unknownError": "Ocurrió un error desconocido"
+  },
+  "deviceErrors": {
+    "1": {
+      "name": "EEPROM",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "2": {
+      "name": "EEPROM",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "3": {
+      "name": "Tensión alta",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "4": {
+      "name": "Temperatura",
+      "description": "La unidad se está enfriando demasiado. Deje que se caliente o colóquela donde haya una temperatura ambiente más elevada."
+    },
+    "5": {
+      "name": "Temperatura",
+      "description": "La unidad está demasiado fría. Deje que se caliente o colóquela donde haya una temperatura ambiente más elevada."
+    },
+    "6": {
+      "name": "Temperatura",
+      "description": "La unidad se está calentando demasiado. Deje que se enfríe o colóquela donde haya una temperatura ambiente más baja."
+    },
+    "7": {
+      "name": "Temperatura",
+      "description": "La unidad está demasiado caliente. Deje que se enfríe o colóquela donde haya una temperatura ambiente más baja."
+    },
+    "8": {
+      "name": "Sensor roto",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "9": {
+      "name": "Sensor roto",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "10": {
+      "name": "Eficiencia",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "11": {
+      "name": "Sobrecarga de E/S",
+      "description": "Desconecte el conector E/S (REMOTE) y compruebe si el conector o el cable están dañados. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "12": {
+      "name": "Sobrecarga de E/S",
+      "description": "Desconecte el conector E/S (DATA) y compruebe si el conector o el cable están dañados. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "13": {
+      "name": "Sobrecarga de E/S",
+      "description": "Desconecte el conector E/S (frente) y compruebe si el conector o el cable están dañados. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "14": {
+      "name": "Sobrecarga de E/S",
+      "description": "Desconecte el conector E/S (C2) y compruebe si el conector o el cable están dañados. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "20": {
+      "name": "Sobrecarga de 230VCA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "22": {
+      "name": "Cargador",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "23": {
+      "name": "Cargador",
+      "description": "Retire las conexiones de 230 VCA y vuelva a conectarlas para continuar con la carga. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "30": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "31": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "32": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "33": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "34": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "35": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "36": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "37": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "38": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "39": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "40": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "41": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "42": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "43": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "44": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "45": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "46": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "47": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "48": {
+      "name": "Calibración",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "50": {
+      "name": "Batería vacía",
+      "description": "La batería está profundamente descargada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "51": {
+      "name": "Batería vacía",
+      "description": "No queda batería. Cargue la unidad."
+    },
+    "52": {
+      "name": "Batería baja",
+      "description": "Queda poca batería. Cargue la unidad."
+    },
+    "53": {
+      "name": "Batería vacía",
+      "description": "No queda batería. Cargue la unidad."
+    },
+    "54": {
+      "name": "Equilibrado",
+      "description": "Equilibrado de celdas en curso. Si la advertencia persiste pasadas 24 horas, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "55": {
+      "name": "Equilibrado",
+      "description": "Equilibrado de celdas en curso. Si el fallo persiste pasadas 24 horas, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "56": {
+      "name": "Temperatura",
+      "description": "La unidad se está enfriando demasiado. Deje que se caliente o colóquela donde haya una temperatura ambiente más elevada."
+    },
+    "57": {
+      "name": "Temperatura",
+      "description": "La unidad está demasiado fría. Deje que se caliente o colóquela donde haya una temperatura ambiente más elevada."
+    },
+    "58": {
+      "name": "Temperatura",
+      "description": "La unidad se está calentando demasiado. Deje que se enfríe o colóquela donde haya una temperatura ambiente más baja."
+    },
+    "59": {
+      "name": "Temperatura",
+      "description": "La unidad está demasiado caliente. Deje que se enfríe o colóquela donde haya una temperatura ambiente más baja."
+    },
+    "60": {
+      "name": "Batería vacía",
+      "description": "No queda batería. Cargue la unidad."
+    },
+    "61": {
+      "name": "Corriente de descarga de la batería",
+      "description": "La batería se está descargando con una corriente demasiado alta. Retire cualquier carga de 230 VCA y 12 VCC. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "62": {
+      "name": "Corriente de carga de la batería",
+      "description": "La batería se está cargando con una corriente demasiado alta.  Desconecte todas las fuentes de carga (solar, CC y CA). Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "70": {
+      "name": "Solar",
+      "description": "Compruebe que la instalación solar sea correcta y que la tensión del panel solar sea de 50 V como máximo."
+    },
+    "71": {
+      "name": "Solar",
+      "description": "Compruebe la correcta instalación solar y la corriente máxima del panel solar."
+    },
+    "72": {
+      "name": "Solar",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "73": {
+      "name": "Fusible solar",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "74": {
+      "name": "Solar",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "75": {
+      "name": "Autoprotección solar",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "88": {
+      "name": "Sobrecarga de SALIDA de 12VCC",
+      "description": "Salida de 12 VCC sobrecargada. Retire la carga para evitar que se apague."
+    },
+    "89": {
+      "name": "Fallo de arranque rápido",
+      "description": "El arranque rápido se ha detenido."
+    },
+    "90": {
+      "name": "ENTRADA de 12VCC baja",
+      "description": "Tensión de entrada de CC demasiado baja para la carga. Compruebe la tensión de la batería del vehículo."
+    },
+    "91": {
+      "name": "ENTRADA de 12VCC baja",
+      "description": "Tensión de entrada de CC demasiado alta para la carga.  Compruebe la tensión de la batería del vehículo."
+    },
+    "92": {
+      "name": "Tensión de entrada CC baja",
+      "description": "El convertidor CC/CC no funciona debido a la tensión baja"
+    },
+    "93": {
+      "name": "Carga de 12VCC",
+      "description": "No se puede cargar desde el vehículo. Compruebe la instalación desde la batería del vehículo. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "94": {
+      "name": "Relé de SALIDA de 12VCC",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "95": {
+      "name": "Relé de SALIDA de 12VCC",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "96": {
+      "name": "Sobrecarga de SALIDA de 12 V CC",
+      "description": "Corriente de carga de salida de 12 VCC demasiado alta. Compruebe la instalación del vehículo."
+    },
+    "97": {
+      "name": "Sobrecarga de SALIDA de 12VCC",
+      "description": "Retire la carga de 12 VCC y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "101": {
+      "name": "Compensación de CA",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "102": {
+      "name": "Compensación de CC",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "105": {
+      "name": "Tensión alta",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "120": {
+      "name": "Carga de 12VCC",
+      "description": "Pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "121": {
+      "name": "Comunicación",
+      "description": "Compruebe los cables CAN. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "122": {
+      "name": "Temperatura",
+      "description": "La unidad se está calentando demasiado. Deje que se enfríe o colóquela donde haya una temperatura ambiente más baja."
+    },
+    "123": {
+      "name": "Temperatura",
+      "description": "La unidad está demasiado caliente. Deje que se enfríe o colóquela donde haya una temperatura ambiente más baja."
+    },
+    "124": {
+      "name": "Carga de 12VCC",
+      "description": "Tensión de entrada de 12 VCC demasiado alta para la carga. Compruebe la instalación del vehículo."
+    },
+    "125": {
+      "name": "Carga de 12VCC",
+      "description": "Pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "126": {
+      "name": "Carga de 12VCC",
+      "description": "Pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "127": {
+      "name": "Carga de 12VCC",
+      "description": "Pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "130": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "131": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "132": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "133": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "135": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "136": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "137": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "138": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "139": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "140": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "141": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "142": {
+      "name": "Suministro eléctrico",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "150": {
+      "name": "Sobrecarga de 230VCA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "151": {
+      "name": "Sobrecarga de 230VCA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "152": {
+      "name": "Sobrecarga de 230VCA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "153": {
+      "name": "Relé de PE/N",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "154": {
+      "name": "Relé de PE/N",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "155": {
+      "name": "Sobrecarga de 230VCA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "156": {
+      "name": "Salida de CA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "200": {
+      "name": "Pico de ENTRADA de 230VCA",
+      "description": "Pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "202": {
+      "name": "Tensión alta",
+      "description": "Pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "203": {
+      "name": "Sobrecarga de 230VCA",
+      "description": "Retire la carga de 230 VCA y pulse < QUITAR > para reiniciar la unidad. Si el reinicio no elimina el fallo, póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "204": {
+      "name": "Relé de transferencia",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "205": {
+      "name": "Relé de transferencia",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "206": {
+      "name": "Tensión de ENTRADA de 230VCA baja",
+      "description": "Tensión de entrada de 230 VCA demasiado baja. Compruebe los cables de alimentación, retire el alargador o pruebe con otra toma de corriente. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "207": {
+      "name": "Tensión de ENTRADA de 230VCA baja",
+      "description": "Tensión de entrada de 230 VCA demasiado alta. Compruebe la red eléctrica."
+    },
+    "208": {
+      "name": "Entrada de CA",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "223": {
+      "name": "Comunicación",
+      "description": "Compruebe los cables CAN. Si esto no soluciona el problema, póngase en contacto con el distribuidor."
+    },
+    "240": {
+      "name": "Sistema bloqueado",
+      "description": "Tensión de celda excesivamente baja: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "241": {
+      "name": "Sistema bloqueado",
+      "description": "Tensión de celda excesivamente alta: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "242": {
+      "name": "Sistema bloqueado",
+      "description": "Tensión de batería excesivamente baja: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "243": {
+      "name": "Sistema bloqueado",
+      "description": "Tensión de batería excesivamente alta: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "244": {
+      "name": "Sistema bloqueado",
+      "description": "Temperatura excesivamente baja: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "245": {
+      "name": "Sistema bloqueado",
+      "description": "Temperatura excesivamente alta: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "246": {
+      "name": "Sistema bloqueado",
+      "description": "Corriente de carga excesivamente alta: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "247": {
+      "name": "Sistema bloqueado",
+      "description": "Corriente de descarga excesivamente alta: unidad bloqueada. Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "ErrorUnknown": {
+      "name": "Error",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    },
+    "rrorUnknown": {
+      "name": "Error",
+      "description": "Póngase en contacto con el distribuidor para obtener ayuda."
+    }
+  }
+}

@@ -2,52 +2,70 @@ import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, Platform, AppState } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { View, StyleSheet, Platform, AppState, Pressable } from 'react-native';
+import { useFonts } from 'expo-font';
 
 import DashboardScreen from './src/screens/DashboardScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import ConnectScreen from './src/screens/ConnectScreen';
 import FirmwareUpdateScreen from './src/screens/FirmwareUpdateScreen';
-import { colors, radius } from './src/utils/theme';
+import CarbonIcon from './src/components/CarbonIcon';
+import ErrorCenter from './src/components/ErrorCenter';
+import { colors, fontAssets } from './src/utils/theme';
 import bleService from './src/services/bleService';
+import canGatewayService from './src/services/canGatewayService';
 
 const Tab = createBottomTabNavigator();
+
+const DASHBOARD_POLL_MS = 2000;
 
 const navTheme = {
   ...DefaultTheme,
   dark: true,
   colors: {
     ...DefaultTheme.colors,
-    primary: colors.accent,
+    primary: colors.blue,
     background: colors.bg,
-    card: colors.bgElevated,
-    text: colors.text,
-    border: colors.border,
+    card: colors.bg,
+    text: colors.ink,
+    border: colors.line,
   },
 };
 
-function TabIcon({ label, focused }) {
-  const iconMap = {
-    Dashboard: 'dashboard',
-    Settings: 'settings',
-    Connect: 'bluetooth-connected',
-    Update: 'system-update',
-  };
+const TAB_ICONS = {
+  Dashboard: 'dash',
+  Settings: 'gear',
+  Update: 'update',
+  Connect: 'bt',
+};
 
+// Tab bar (spec §5): icons only. The selected tab is drawn like the selected
+// row in the display's menu: the whole cell becomes a grey plate with a blue
+// edge (here along the top) and a blue icon. The button is replaced outright
+// because the default one squeezes the icon into a ~31 dp box.
+function TabButton({ routeName, alert, onPress, onLongPress, 'aria-selected': selected }) {
   return (
-    <View style={styles.tabIcon}>
-      <MaterialIcons
-        name={iconMap[label] || 'circle'}
-        size={22}
-        color={focused ? colors.accent : colors.textMuted}
-      />
-    </View>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: !!selected }}
+      accessibilityLabel={routeName}
+      style={[styles.tabCell, selected && styles.tabCellOn]}
+    >
+      {selected && <View style={styles.tabEdge} />}
+      <View>
+        <CarbonIcon name={TAB_ICONS[routeName] || 'dash'} size={26} color={selected ? colors.blue : colors.dim} />
+        {alert && <View style={styles.tabDot} />}
+      </View>
+    </Pressable>
   );
 }
 
 export default function App() {
   const [connected, setConnected] = useState(false);
+  const [fontsLoaded] = useFonts(fontAssets);
 
   useEffect(() => {
     const applyImmersiveMode = async () => {
@@ -72,16 +90,33 @@ export default function App() {
       if (state === 'active') applyImmersiveMode();
     });
 
-    const bleUnsub = bleService.onConnectionChange(setConnected);
+    // Dashboard snapshots feed every screen (status bar, error popups,
+    // forecast history), so polling lives here rather than in one screen.
+    let pollTimer = null;
+    const bleUnsub = bleService.onConnectionChange((c) => {
+      setConnected(c);
+      clearInterval(pollTimer);
+      pollTimer = null;
+      if (c) {
+        canGatewayService.requestUnits();
+        canGatewayService.requestDashboard();
+        pollTimer = setInterval(() => {
+          if (bleService.isConnected) canGatewayService.requestDashboard();
+        }, DASHBOARD_POLL_MS);
+      }
+    });
 
     return () => {
       appStateSub.remove();
       bleUnsub();
+      clearInterval(pollTimer);
     };
   }, []);
 
+  if (!fontsLoaded) return <View style={styles.boot} />;
+
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="light" hidden={true} />
       <NavigationContainer theme={navTheme}>
         <Tab.Navigator
@@ -89,8 +124,8 @@ export default function App() {
             headerShown: false,
             tabBarStyle: styles.tabBar,
             tabBarShowLabel: false,
-            tabBarIcon: ({ focused }) => (
-              <TabIcon label={route.name} focused={focused} />
+            tabBarButton: (props) => (
+              <TabButton {...props} routeName={route.name} alert={route.name === 'Connect' && !connected} />
             ),
           })}
           initialRouteName="Connect"
@@ -98,36 +133,27 @@ export default function App() {
           <Tab.Screen name="Dashboard" component={DashboardScreen} />
           <Tab.Screen name="Settings" component={SettingsScreen} />
           <Tab.Screen name="Update" component={FirmwareUpdateScreen} />
-          <Tab.Screen
-            name="Connect"
-            component={ConnectScreen}
-            options={{
-              tabBarBadge: connected ? undefined : '!',
-              tabBarBadgeStyle: styles.badge,
-            }}
-          />
+          <Tab.Screen name="Connect" component={ConnectScreen} />
         </Tab.Navigator>
       </NavigationContainer>
-    </>
+      <ErrorCenter />
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  boot: { flex: 1, backgroundColor: colors.bg },
   tabBar: {
-    backgroundColor: colors.bgElevated,
-    borderTopColor: colors.borderSubtle,
+    backgroundColor: colors.bg,
+    borderTopColor: colors.line,
     borderTopWidth: 1,
-    height: 70,
-    paddingBottom: 8,
-    paddingTop: 8,
+    height: 64,
+    paddingTop: 0,
+    paddingBottom: 0,
+    elevation: 0,
   },
-  tabIcon: { alignItems: 'center', justifyContent: 'center' },
-  badge: {
-    backgroundColor: colors.red,
-    fontSize: 10,
-    minWidth: 16,
-    height: 16,
-    lineHeight: 16,
-    borderRadius: radius.full,
-  },
+  tabCell: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  tabCellOn: { backgroundColor: colors.panel },
+  tabEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: colors.blue },
+  tabDot: { position: 'absolute', top: -3, right: -5, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red },
 });

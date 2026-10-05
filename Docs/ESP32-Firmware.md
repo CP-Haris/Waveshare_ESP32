@@ -375,6 +375,7 @@ See [MobileApp.md](MobileApp.md) for the app side. The firmware side is in `ble_
 | `0x18` | `BLE_CMD_SET_CAN_PASSTHROUGH` | `[enabled]` | Enable or disable CAN forwarding |
 | `0x19` | `BLE_CMD_SEND_CAN_FRAME` | `[can_id_u32_le][dlc][data8]` | Send one CAN frame |
 | `0x1A` | `BLE_CMD_SEND_CAN_FRAMES` | `[count][can_id_u32_le][dlc][data8]...` | Send a batch of CAN frames |
+| `0x1B` | `BLE_CMD_SYNC_TIME` | `[year_u16_le][month][day][hour][min][sec][force]` | Phone's local time. Sets the RTC only while the clock is unset (year < `CLOCK_YEAR_MIN`), unless `force` = 1. Applied in the main loop, not on the BLE thread |
 
 When passthrough is enabled, every received CAN frame is forwarded to the app as `BLE_MSG_CAN_FRAME`. The firmware still decodes CAN frames for the local LCD UI, but it no longer emits ESP32-generated dashboard/settings/unit/error BLE packets.
 

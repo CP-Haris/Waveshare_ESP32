@@ -120,6 +120,22 @@ export function IconButton({ icon, onPress, color = colors.ink, disabled }) {
   );
 }
 
+/** On/off switch: square plate, knob slides right and turns the plate blue. */
+export function Toggle({ value, onValueChange, disabled }) {
+  return (
+    <Pressable
+      onPress={() => onValueChange(!value)}
+      disabled={disabled}
+      hitSlop={8}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: !!value, disabled: !!disabled }}
+      style={[styles.toggle, value && styles.toggleOn, disabled && styles.disabled]}
+    >
+      <View style={[styles.toggleKnob, value && styles.toggleKnobOn]} />
+    </Pressable>
+  );
+}
+
 export function Notice({ text, color = colors.red }) {
   return (
     <View style={[styles.notice, { borderLeftColor: color }]}>
@@ -205,6 +221,19 @@ const styles = StyleSheet.create({
     borderColor: colors.edge,
     backgroundColor: colors.panel,
   },
+
+  toggle: {
+    width: 52,
+    height: 30,
+    padding: 3,
+    justifyContent: 'center',
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.edge,
+  },
+  toggleOn: { backgroundColor: colors.blue, borderColor: colors.blue },
+  toggleKnob: { width: 22, height: 22, backgroundColor: colors.dim },
+  toggleKnobOn: { alignSelf: 'flex-end', backgroundColor: colors.ink },
 
   notice: {
     borderLeftWidth: 4,

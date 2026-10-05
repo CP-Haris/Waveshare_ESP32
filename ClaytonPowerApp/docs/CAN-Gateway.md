@@ -9,6 +9,7 @@ The app uses the existing BLE service and only relies on the gateway commands:
 - `0x18 SET_CAN_PASSTHROUGH` enables CAN forwarding.
 - `0x19 SEND_CAN_FRAME` sends one 29-bit CAN frame from the app to the bus.
 - `0x1A SEND_CAN_FRAMES` sends a batch of CAN frames, mainly used by the bootloader.
+- `0x1B SYNC_TIME` sends the phone's local time on connect; the display sets its clock only while it is unset.
 - `0x08 CAN_FRAME` notifications carry raw CAN frames from the bus back to the app.
 
 Legacy high-level BLE helpers such as `GET_DASHBOARD`, `GET_SETTING`, `SET_SETTING`, `GET_UNITS`, and `GET_ERRORS` have been removed from the mobile app protocol layer. Dashboard, settings, unit discovery, and errors are handled by the app-side CAN parser.

@@ -10,11 +10,12 @@ import StatusBar from '../components/StatusBar';
 import CarbonIcon from '../components/CarbonIcon';
 import { openErrorList, worstColor } from '../components/ErrorCenter';
 import { Button, Row, ScreenTitle, Section, Sheet } from '../components/Carbon';
+import RangeSlider from '../components/RangeSlider';
+import BackgroundSetting from '../components/BackgroundSetting';
 import { colors, font, spacing, type } from '../utils/theme';
 import { activeErrorDefinitions } from '../utils/errorCodes';
 import { unitFamily } from '../utils/units';
-import bleService from '../services/bleService';
-import canGatewayService from '../services/canGatewayService';
+import deviceSession from '../devices/deviceSession';
 
 const PREFIX = {
   VOLTAGE: 1,
@@ -85,6 +86,8 @@ const SETTING_VALUE_TIMEOUT_MS = 2500;
 const SETTING_REFRESH_FRESH_MS = 6000;
 const DETAIL_AUTO_REFRESH_MS = 8000;
 const MAX_RETRIES = 2;
+const RANGE_RETRY_MS = 1500;
+const RANGE_MAX_RETRIES = 3;
 
 const UNIT_KIND = { LPS: 'LPS', BMS: 'BMS' };
 
@@ -147,8 +150,8 @@ function normalizeUnitKind(type, partNumber) {
 }
 
 export default function SettingsScreen() {
-  const [connected, setConnected] = useState(bleService.isConnected);
-  const initialActiveUnit = canGatewayService.getActiveUnitInfo();
+  const [connected, setConnected] = useState(deviceSession.isConnected);
+  const initialActiveUnit = deviceSession.getActiveUnitInfo();
   const [activeUnitKind, setActiveUnitKind] = useState(() => normalizeUnitKind(initialActiveUnit?.type, initialActiveUnit?.partNumber));
   const [errors, setErrors] = useState([]);
 
@@ -208,7 +211,7 @@ export default function SettingsScreen() {
       if (attempts < MAX_RETRIES) {
         retryCountRef.current[key] = attempts + 1;
         lastValueRequestRef.current[key] = Date.now();
-        enqueueCommand(() => canGatewayService.getSetting(block, id));
+        enqueueCommand(() => deviceSession.getSetting(block, id));
         startValueLoadTimeout(key, block, id);
       } else {
         setLoadingSettings((prev) => ({ ...prev, [key]: false }));
@@ -245,7 +248,7 @@ export default function SettingsScreen() {
   }, [clearPendingSettingActivity]);
 
   const syncActiveUnit = useCallback(() => {
-    const activeUnit = canGatewayService.getActiveUnitInfo();
+    const activeUnit = deviceSession.getActiveUnitInfo();
     if (!activeUnit) {
       activeUnitIndexRef.current = null;
       setActiveUnitKind(UNIT_KIND.LPS);
@@ -261,13 +264,13 @@ export default function SettingsScreen() {
   }, [resetSettingSession]);
 
   const refreshErrors = useCallback(() => {
-    canGatewayService.requestErrors();
+    deviceSession.requestErrors();
   }, []);
 
   useEffect(() => {
     syncActiveUnit();
 
-    const unsubConn = bleService.onConnectionChange((nextConnected) => {
+    const unsubConn = deviceSession.onConnectionChange((nextConnected) => {
       setConnected(nextConnected);
       if (!nextConnected) {
         activeUnitIndexRef.current = null;
@@ -276,10 +279,10 @@ export default function SettingsScreen() {
         return;
       }
       syncActiveUnit();
-      canGatewayService.requestErrors();
+      deviceSession.requestErrors();
     });
 
-    const unsubNotif = canGatewayService.onNotification((msg) => {
+    const unsubNotif = deviceSession.onNotification((msg) => {
       if (msg.type === 'unitInfo' || msg.type === 'dashboard') syncActiveUnit();
 
       if (msg.type === 'errors') setErrors(msg.data);
@@ -342,7 +345,7 @@ export default function SettingsScreen() {
       retryCountRef.current[key] = 0;
       startValueLoadTimeout(key, s.block, s.id);
       lastValueRequestRef.current[key] = now;
-      enqueueCommand(() => canGatewayService.getSetting(s.block, s.id));
+      enqueueCommand(() => deviceSession.getSetting(s.block, s.id));
     });
   }, [enqueueCommand, startValueLoadTimeout]);
 
@@ -363,7 +366,7 @@ export default function SettingsScreen() {
 
   const openEditor = useCallback((def) => {
     if (!settingRanges[def.key]) {
-      enqueueCommand(() => canGatewayService.getRange(def.block, def.id));
+      enqueueCommand(() => deviceSession.getRange(def.block, def.id));
     }
     const current = settingValues[def.key];
     const range = settingRanges[def.key];
@@ -371,6 +374,23 @@ export default function SettingsScreen() {
     setEditorDraft(current ?? range?.min ?? 0);
     setEditorVisible(true);
   }, [settingValues, settingRanges, enqueueCommand]);
+
+  // A min/max request can go unanswered (busy link, unit still waking up), so
+  // ask again while the editor is open and the range is still unknown.
+  const editorRangeKnown = editorDef ? !!settingRanges[editorDef.key] : true;
+  useEffect(() => {
+    if (!editorVisible || !editorDef || editorRangeKnown) return undefined;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (attempts > RANGE_MAX_RETRIES) {
+        clearInterval(timer);
+        return;
+      }
+      enqueueCommand(() => deviceSession.getRange(editorDef.block, editorDef.id));
+    }, RANGE_RETRY_MS);
+    return () => clearInterval(timer);
+  }, [editorVisible, editorDef, editorRangeKnown, enqueueCommand]);
 
   const adjustDraft = useCallback((delta) => {
     if (!editorDef) return;
@@ -389,7 +409,7 @@ export default function SettingsScreen() {
   const saveEditor = useCallback(async () => {
     if (!editorDef) return;
     setSaveStatus((prev) => ({ ...prev, [editorDef.key]: 'saving' }));
-    const ok = await canGatewayService.setSetting(editorDef.block, editorDef.id, editorDraft);
+    const ok = await deviceSession.setSetting(editorDef.block, editorDef.id, editorDraft);
     if (!ok) {
       setSaveStatus((prev) => ({ ...prev, [editorDef.key]: 'error' }));
       return;
@@ -400,7 +420,7 @@ export default function SettingsScreen() {
     retryCountRef.current[editorDef.key] = 0;
     startValueLoadTimeout(editorDef.key, editorDef.block, editorDef.id);
     lastValueRequestRef.current[editorDef.key] = Date.now();
-    enqueueCommand(() => canGatewayService.getSetting(editorDef.block, editorDef.id));
+    enqueueCommand(() => deviceSession.getSetting(editorDef.block, editorDef.id));
 
     if (saveTimersRef.current[editorDef.key]) clearTimeout(saveTimersRef.current[editorDef.key]);
     saveTimersRef.current[editorDef.key] = setTimeout(() => {
@@ -442,15 +462,13 @@ export default function SettingsScreen() {
   const editorFastStep = editorDef ? getFastStep(editorDef) : 65536;
   const errorDefs = activeErrorDefinitions(errors);
   const range = editorDef ? settingRanges[editorDef.key] : null;
-  const rangeFill = range && range.max > range.min
-    ? Math.max(0, Math.min(1, (editorDraft - range.min) / (range.max - range.min)))
-    : 0;
 
   if (!connected) {
     return (
       <View style={styles.screen}>
         <StatusBar />
         <ScreenTitle title="SETTINGS" />
+        <BackgroundSetting />
         <View style={styles.center}>
           <CarbonIcon name="bt" size={48} color={colors.faint} />
           <Text style={[type.zone, styles.dim]}>NOT CONNECTED</Text>
@@ -496,6 +514,8 @@ export default function SettingsScreen() {
             ))}
           </Section>
         )}
+
+        {!inDetail && <BackgroundSetting />}
 
         {inDetail && (
           <Section title="SETTINGS">
@@ -560,9 +580,13 @@ export default function SettingsScreen() {
               <EditorValue text={editorDef ? formatSettingValue(editorDef, editorDraft) : '--'} />
               <StepButton icon="plus" onStep={(fast) => adjustDraft(fast ? editorFastStep : (editorDef?.step || 65536))} />
             </View>
-            <View style={styles.rangeTrack}>
-              <View style={[styles.rangeFill, { width: `${rangeFill * 100}%` }]} />
-            </View>
+            <RangeSlider
+              min={range?.min}
+              max={range?.max}
+              value={editorDraft}
+              step={editorDef?.step || 65536}
+              onChange={setEditorDraft}
+            />
             <View style={styles.rangeLabels}>
               <Text style={type.small}>{editorDef ? formatSettingValue(editorDef, range?.min) : '--'}</Text>
               <Text style={type.small}>{editorDef ? formatSettingValue(editorDef, range?.max) : '--'}</Text>
@@ -647,9 +671,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.edge,
   },
-  rangeTrack: { height: 6, backgroundColor: colors.track, marginTop: spacing.lg },
-  rangeFill: { height: 6, backgroundColor: colors.blue },
-  rangeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
+  rangeLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
 
   enumList: { marginTop: spacing.sm },
   enumRow: {

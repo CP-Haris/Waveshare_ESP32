@@ -39,6 +39,8 @@ Consists of two components: an ESP32-S3 touchscreen HMI running on the CAN bus, 
 | [ESP32-Firmware.md](ESP32-Firmware.md) | Firmware architecture, CAN protocol, BLE protocol, LVGL UI, power management, build instructions |
 | [MobileApp.md](MobileApp.md) | App architecture, screens, BLE connection flow, binary protocol parsing, build instructions |
 | [Hardware.md](Hardware.md) | Board pinout, LCD wiring, CAN bus wiring, I2C peripherals |
+| [LPS2-BLE-Protocol.md](LPS2-BLE-Protocol.md) | LPS2 built-in BLE: GATT, framing, commands and values (path without ClaytonDisplay) |
+| [LPS2-Display-Fix-BLE-Settings.md](LPS2-Display-Fix-BLE-Settings.md) | Requested LPS2 display firmware change so settings written from the app reach the control board |
 
 ---
 

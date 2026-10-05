@@ -6,8 +6,7 @@ import UnitSwitcher from './UnitSwitcher';
 import { openErrorList, worstColor } from './ErrorCenter';
 import { colors, font, spacing, type } from '../utils/theme';
 import { activeErrorDefinitions } from '../utils/errorCodes';
-import bleService from '../services/bleService';
-import canGatewayService from '../services/canGatewayService';
+import deviceSession from '../devices/deviceSession';
 
 function clockText() {
   const d = new Date();
@@ -17,16 +16,16 @@ function clockText() {
 /** Shared 48 dp status line (spec §5): error badge, BLE, unit chip, clock. */
 export default function StatusBar() {
   const insets = useSafeAreaInsets();
-  const [connected, setConnected] = useState(bleService.isConnected);
+  const [connected, setConnected] = useState(deviceSession.isConnected);
   const [defs, setDefs] = useState([]);
   const [clock, setClock] = useState(clockText);
 
   useEffect(() => {
-    const unsubConn = bleService.onConnectionChange((c) => {
+    const unsubConn = deviceSession.onConnectionChange((c) => {
       setConnected(c);
       if (!c) setDefs([]);
     });
-    const unsub = canGatewayService.onNotification((msg) => {
+    const unsub = deviceSession.onNotification((msg) => {
       if (msg.type === 'dashboard') setDefs(activeErrorDefinitions(msg.data.errorCodes));
       else if (msg.type === 'errors') setDefs(activeErrorDefinitions(msg.data));
     });

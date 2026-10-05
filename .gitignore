@@ -25,8 +25,8 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 *.tsbuildinfo
-ios/
-android/
+/ClaytonPowerApp/ios/
+/ClaytonPowerApp/android/
 
 # .NET build output and local project state
 [Bb]in/
@@ -48,3 +48,9 @@ dependencies.lock.tmp
 *.temp
 *.bak
 *.orig
+# MPLAB X build output and local state (LPS2 Display Firmware reference)
+*.X/dist/
+*.X/build/
+*.X/debug/
+*.X/nbproject/private/
+*.X/queuelogs/

@@ -13,8 +13,8 @@ import FirmwareUpdateScreen from './src/screens/FirmwareUpdateScreen';
 import CarbonIcon from './src/components/CarbonIcon';
 import ErrorCenter from './src/components/ErrorCenter';
 import { colors, fontAssets } from './src/utils/theme';
-import bleService from './src/services/bleService';
-import canGatewayService from './src/services/canGatewayService';
+import deviceSession from './src/devices/deviceSession';
+import { backgroundService } from './src/services/backgroundService';
 
 const Tab = createBottomTabNavigator();
 
@@ -65,6 +65,8 @@ function TabButton({ routeName, alert, onPress, onLongPress, 'aria-selected': se
 
 export default function App() {
   const [connected, setConnected] = useState(false);
+  // The Update tab only exists for chips with a bootloader path (ClaytonDisplay).
+  const [canUpdate, setCanUpdate] = useState(true);
   const [fontsLoaded] = useFonts(fontAssets);
 
   useEffect(() => {
@@ -86,6 +88,8 @@ export default function App() {
     };
 
     applyImmersiveMode();
+    // Reconnect to the last unit and, if enabled, keep it in the background.
+    backgroundService.start();
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') applyImmersiveMode();
     });
@@ -93,15 +97,15 @@ export default function App() {
     // Dashboard snapshots feed every screen (status bar, error popups,
     // forecast history), so polling lives here rather than in one screen.
     let pollTimer = null;
-    const bleUnsub = bleService.onConnectionChange((c) => {
+    const bleUnsub = deviceSession.onConnectionChange((c) => {
       setConnected(c);
+      setCanUpdate(!c || deviceSession.capabilities.firmwareUpdate);
       clearInterval(pollTimer);
       pollTimer = null;
       if (c) {
-        canGatewayService.requestUnits();
-        canGatewayService.requestDashboard();
+        deviceSession.requestDashboard();
         pollTimer = setInterval(() => {
-          if (bleService.isConnected) canGatewayService.requestDashboard();
+          if (deviceSession.isConnected) deviceSession.requestDashboard();
         }, DASHBOARD_POLL_MS);
       }
     });
@@ -132,7 +136,7 @@ export default function App() {
         >
           <Tab.Screen name="Dashboard" component={DashboardScreen} />
           <Tab.Screen name="Settings" component={SettingsScreen} />
-          <Tab.Screen name="Update" component={FirmwareUpdateScreen} />
+          {canUpdate && <Tab.Screen name="Update" component={FirmwareUpdateScreen} />}
           <Tab.Screen name="Connect" component={ConnectScreen} />
         </Tab.Navigator>
       </NavigationContainer>

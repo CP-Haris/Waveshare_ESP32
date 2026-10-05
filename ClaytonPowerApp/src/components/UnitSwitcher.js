@@ -4,8 +4,7 @@ import CarbonIcon from './CarbonIcon';
 import { IconButton, Sheet } from './Carbon';
 import { colors, font, spacing, type } from '../utils/theme';
 import { unitFamily } from '../utils/units';
-import bleService from '../services/bleService';
-import canGatewayService from '../services/canGatewayService';
+import deviceSession from '../devices/deviceSession';
 
 function unitTag(unit) {
   const family = unitFamily(unit || {});
@@ -20,21 +19,21 @@ function serialSuffix(unit) {
 
 /** Unit chip + picker sheet (spec §9). */
 export default function UnitSwitcher() {
-  const [connected, setConnected] = useState(bleService.isConnected);
-  const [units, setUnits] = useState(() => canGatewayService.getUnits());
-  const [activeUnit, setActiveUnit] = useState(() => canGatewayService.getActiveUnitInfo());
+  const [connected, setConnected] = useState(deviceSession.isConnected);
+  const [units, setUnits] = useState(() => deviceSession.getUnits());
+  const [activeUnit, setActiveUnit] = useState(() => deviceSession.getActiveUnitInfo());
   const [modalVisible, setModalVisible] = useState(false);
-  const [locked, setLocked] = useState(bleService.commandLockOwner === 'firmware-update');
+  const [locked, setLocked] = useState(deviceSession.isLocked);
 
   const refreshFromService = () => {
-    setUnits(canGatewayService.getUnits());
-    setActiveUnit(canGatewayService.getActiveUnitInfo());
+    setUnits(deviceSession.getUnits());
+    setActiveUnit(deviceSession.getActiveUnitInfo());
   };
 
   useEffect(() => {
     refreshFromService();
 
-    const unsubConn = bleService.onConnectionChange((nextConnected) => {
+    const unsubConn = deviceSession.onConnectionChange((nextConnected) => {
       setConnected(nextConnected);
       if (!nextConnected) {
         setModalVisible(false);
@@ -43,17 +42,17 @@ export default function UnitSwitcher() {
         return;
       }
       refreshFromService();
-      canGatewayService.requestUnits();
+      deviceSession.requestUnits();
     });
 
-    const unsubGateway = canGatewayService.onNotification((message) => {
+    const unsubGateway = deviceSession.onNotification((message) => {
       if (message.type === 'unitInfo' || message.type === 'dashboard' || message.type === 'errors') {
         refreshFromService();
       }
     });
 
     const lockTimer = setInterval(() => {
-      const nextLocked = bleService.commandLockOwner === 'firmware-update';
+      const nextLocked = deviceSession.isLocked;
       setLocked(nextLocked);
       if (nextLocked) setModalVisible(false);
     }, 600);
@@ -69,23 +68,26 @@ export default function UnitSwitcher() {
 
   const selectUnit = (unit) => {
     if (locked) return;
-    canGatewayService.selectUnit(unit.index);
+    deviceSession.selectUnit(unit.index);
     setModalVisible(false);
   };
 
   const suffix = serialSuffix(activeUnit);
+  // Only a ClaytonDisplay sees several units; an LPS2 link is always one.
+  const pickable = deviceSession.capabilities.multiUnit;
 
   return (
     <>
       <Pressable
         style={({ pressed }) => [styles.chip, pressed && styles.chipPressed, locked && styles.locked]}
         onPress={() => setModalVisible(true)}
-        disabled={locked}
+        disabled={locked || !pickable}
         hitSlop={4}
       >
         <Text style={styles.chipTag}>{activeUnit ? unitTag(activeUnit) : 'UNIT'}</Text>
         {!!suffix && <Text style={styles.chipText}>{suffix}</Text>}
-        <CarbonIcon name={locked ? 'lock' : 'chevDown'} size={14} color={colors.dim} strokeWidth={2} />
+        {locked && <CarbonIcon name="lock" size={14} color={colors.dim} strokeWidth={2} />}
+        {!locked && pickable && <CarbonIcon name="chevDown" size={14} color={colors.dim} strokeWidth={2} />}
       </Pressable>
 
       <Sheet
@@ -94,7 +96,7 @@ export default function UnitSwitcher() {
         title="SELECT UNIT"
         right={(
           <View style={styles.headActions}>
-            <IconButton icon="refresh" color={colors.blue} onPress={() => canGatewayService.requestUnits()} />
+            <IconButton icon="refresh" color={colors.blue} onPress={() => deviceSession.requestUnits()} />
             <IconButton icon="close" onPress={() => setModalVisible(false)} />
           </View>
         )}

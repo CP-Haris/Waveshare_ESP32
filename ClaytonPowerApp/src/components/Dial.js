@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import Svg, { Path } from 'react-native-svg';
 import CarbonIcon from './CarbonIcon';
 import { colors, type } from '../utils/theme';
+import { FAULT } from '../devices/dashboardModel';
 
 // 270° gauge (spec §6.2) — geometry identical to the display mockup:
 // 64-unit viewBox, radius 24, stroke 6, starting at 225° and sweeping clockwise.
@@ -29,15 +30,15 @@ const ICON_COLOR = {
 };
 
 /**
- * Firmware set_dial()/func_color() port: derive state + fill from the CAN
- * function state, failure byte, live power and the gauge capacity.
+ * Firmware set_dial()/func_color() port: derive gauge state + fill from a
+ * normalized function status (devices/dashboardModel.js) and the capacity.
  */
-export function dialState(state, fail, powerW, capW) {
-  if (state >= 1 && fail < 3 && capW > 0 && powerW > capW) return { state: 'overload', pct: 1 };
-  if (fail >= 3) return { state: 'blocked', pct: 0 };
-  if (state < 1) return { state: 'off', pct: 0 };
+export function dialState({ on, fault, powerW }, capW) {
+  if (on && fault !== FAULT.BLOCKED && capW > 0 && powerW > capW) return { state: 'overload', pct: 1 };
+  if (fault === FAULT.BLOCKED) return { state: 'blocked', pct: 0 };
+  if (!on) return { state: 'off', pct: 0 };
   const pct = capW > 0 ? Math.max(0, Math.min(1, powerW / capW)) : 0;
-  return { state: fail === 2 ? 'warn' : 'on', pct };
+  return { state: fault === FAULT.WARNING ? 'warn' : 'on', pct };
 }
 
 function usePulse(active) {

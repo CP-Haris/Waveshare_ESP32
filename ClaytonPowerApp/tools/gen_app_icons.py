@@ -91,6 +91,16 @@ def splash():
     return canvas
 
 
+def notification_icon():
+    """Android status-bar icon: the same mark as a white silhouette on
+    transparent (Android only uses the alpha channel)."""
+    mark = draw_mark(0.95, transparent=True)
+    alpha = mark.getchannel("A")
+    white = Image.new("RGBA", mark.size, (255, 255, 255, 0))
+    white.putalpha(alpha)
+    return white.resize((96, 96), Image.LANCZOS)
+
+
 def main():
     icon = draw_mark(1.0, transparent=False)
     icon.convert("RGB").save(ASSETS / "icon.png")
@@ -99,7 +109,8 @@ def main():
     draw_mark(0.72, transparent=True).save(ASSETS / "adaptive-icon.png")
     splash().save(ASSETS / "splash-icon.png")
     icon.resize((48, 48), Image.LANCZOS).convert("RGB").save(ASSETS / "favicon.png")
-    print("Wrote icon.png, adaptive-icon.png, splash-icon.png, favicon.png")
+    notification_icon().save(ASSETS / "notification-icon.png")
+    print("Wrote icon.png, adaptive-icon.png, splash-icon.png, favicon.png, notification-icon.png")
 
 
 if __name__ == "__main__":

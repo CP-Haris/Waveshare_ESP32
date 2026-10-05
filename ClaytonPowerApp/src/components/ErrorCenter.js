@@ -4,8 +4,7 @@ import CarbonIcon from './CarbonIcon';
 import { Button, IconButton, Sheet } from './Carbon';
 import { colors, font, spacing, type } from '../utils/theme';
 import { ERROR_LEVEL, activeErrorDefinitions } from '../utils/errorCodes';
-import bleService from '../services/bleService';
-import canGatewayService from '../services/canGatewayService';
+import deviceSession from '../devices/deviceSession';
 
 // Error list sheet + auto popup (spec §7). Mounted once at the app root;
 // the status bar badge opens the list through openErrorList().
@@ -56,7 +55,7 @@ export default function ErrorCenter() {
     };
     listeners.add(onOpen);
 
-    const unsub = canGatewayService.onNotification((msg) => {
+    const unsub = deviceSession.onNotification((msg) => {
       if (msg.type !== 'dashboard' && msg.type !== 'errors') return;
       const codes = msg.type === 'dashboard' ? msg.data.errorCodes : msg.data;
       const defs = activeErrorDefinitions(codes);
@@ -68,7 +67,7 @@ export default function ErrorCenter() {
       if (fresh.length) setPopupQueue((q) => [...q, ...fresh.filter((d) => !q.some((p) => p.code === d.code))]);
     });
 
-    const unsubConn = bleService.onConnectionChange((connected) => {
+    const unsubConn = deviceSession.onConnectionChange((connected) => {
       if (connected) return;
       activeCodesRef.current = new Set();
       setDefinitions([]);
@@ -88,11 +87,11 @@ export default function ErrorCenter() {
     setClearing(true);
     setClearStatus('');
     try {
-      const ok = await canGatewayService.clearErrors();
+      const ok = await deviceSession.clearErrors();
       setClearStatus(ok ? 'Clear command sent' : 'Unable to send clear command');
       if (ok) {
-        canGatewayService.requestErrors();
-        canGatewayService.requestDashboard();
+        deviceSession.requestErrors();
+        deviceSession.requestDashboard();
       }
     } catch (e) {
       setClearStatus('Unable to send clear command');

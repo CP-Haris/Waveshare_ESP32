@@ -43,30 +43,24 @@ ClaytonPowerApp/
 ├── app.json                      # Expo config (name, slug, permissions)
 ├── eas.json                      # EAS build profiles
 ├── src/
-│   ├── screens/
-│   │   ├── ConnectScreen.js      # BLE scan & connection UI
-│   │   ├── DashboardScreen.js    # Live telemetry display
-│   │   ├── SettingsScreen.js     # CAN_Extra configuration editor
-│   │   └── FirmwareUpdateScreen.js # CAN bootloader update flow
-│   ├── components/
-│   │   ├── StatusBar.js          # Shared status line (errors, BLE, unit chip, clock)
-│   │   ├── UnitSwitcher.js       # Global active unit selector
-│   │   ├── ErrorCenter.js        # Error list sheet + auto popup
-│   │   ├── Carbon.js             # Shared primitives (title bar, rows, buttons, sheet)
-│   │   ├── CarbonIcon.js         # Carbon Blue pictograms (SVG)
-│   │   ├── Dial.js               # 270° gauge + round button plate
-│   │   ├── ForecastChart.js      # SoC history + projection chart
-│   │   └── Chevrons.js           # Marching flow chevrons
-│   ├── services/
-│   │   ├── bleService.js         # BLE singleton (scan, connect, notify)
-│   │   ├── canGatewayService.js  # App-side raw CAN parser and sender
-│   │   ├── firmwareUpdateHelpers.js # Bootloader frame/CRC helpers and parsing
-│   │   ├── firmwareUpdateService.js # Bootloader transport/update state machine
-│   │   └── socHistory.js         # SoC ring buffer for the forecast chart
-│   └── utils/
-│       ├── protocol.js           # Binary encode/decode
-│       ├── errorCodes.js         # Error code lookup table
-│       └── theme.js              # Carbon Blue tokens, fonts, type presets
+│   ├── ble/
+│   │   ├── bleLink.js            # BLE transport for both chips (scan, connect, pairing, I/O)
+│   │   └── gattProfiles.js       # GATT UUIDs, chip detection, LPS2 advert parsing
+│   ├── devices/
+│   │   ├── deviceSession.js      # Facade used by all screens; picks the driver, exposes capabilities
+│   │   ├── dashboardModel.js     # Shared dashboard snapshot (normalized functions)
+│   │   ├── display/              # Path A: ClaytonDisplay CAN gateway
+│   │   │   ├── displayDevice.js
+│   │   │   ├── displayProtocol.js
+│   │   │   ├── firmwareUpdateService.js
+│   │   │   └── firmwareUpdateHelpers.js
+│   │   └── lps2/                 # Path B: LPS2 built-in BLE
+│   │       ├── lps2Device.js
+│   │       └── lps2Frame.js
+│   ├── screens/                  # Dashboard, Settings, Update, Connect
+│   ├── components/               # Carbon Blue UI components
+│   ├── services/socHistory.js    # SoC ring buffer for the forecast chart
+│   └── utils/                    # theme, errorCodes, units
 └── assets/                       # Icons & splash screens
 ```
 
@@ -169,7 +163,7 @@ Entry point for BLE device pairing.
 
 Real-time monitoring of the selected LPS/BMS unit.
 
-**Data source**: Ensures CAN passthrough is enabled, decodes live CAN broadcasts in `canGatewayService`, and refreshes the visible snapshot every **2 seconds**. It does not request an ESP32-generated dashboard packet.
+**Data source**: Ensures CAN passthrough is enabled, decodes live CAN broadcasts in `src/devices/display/displayDevice.js`, and refreshes the visible snapshot every **2 seconds**. It does not request an ESP32-generated dashboard packet.
 
 **Layout (scrollable, top to bottom):**
 
@@ -218,7 +212,7 @@ Bootloader update flow over the same raw CAN-over-BLE gateway.
 
 ## 6. BLE Service
 
-### Configuration (`src/services/bleService.js`)
+### Configuration (`src/ble/gattProfiles.js`, `src/ble/bleLink.js`)
 
 Library: `react-native-ble-plx`
 
@@ -230,7 +224,7 @@ Library: `react-native-ble-plx`
 | MTU | 256 bytes |
 | Write type | WriteWithoutResponse |
 
-> **Note on naming**: "TX" from the firmware perspective notifies the phone. "RX" from the firmware perspective receives writes from the phone. The bleService naming follows the app's perspective (TX = data to app, RX = commands from app).
+> **Note on naming**: "TX" from the firmware perspective notifies the phone. "RX" from the firmware perspective receives writes from the phone. The app naming follows the app's perspective (TX = data to app, RX = commands from app).
 
 ### Key Methods
 
@@ -247,7 +241,7 @@ Library: `react-native-ble-plx`
 ### Incoming Message Dispatch
 
 All BLE notifications arrive on the TX characteristic.  
-`decodeNotification()` only decodes raw CAN frame notifications. App-level Dashboard and Settings events are emitted by `canGatewayService` after it parses those CAN frames.
+`decodeNotification()` only decodes raw CAN frame notifications. App-level Dashboard and Settings events are emitted by `displayDevice` after it parses those CAN frames.
 
 ```javascript
 { type: 'canFrame', data: { canId, dlc, data } }
@@ -272,6 +266,7 @@ All BLE payloads use a 1-byte type/command prefix followed by a type-specific pa
 | `0x18` | `CMD.SET_CAN_PASSTHROUGH` | `[enabled]` | Enable or disable CAN forwarding |
 | `0x19` | `CMD.SEND_CAN_FRAME` | `[can_id_u32_le][dlc][data8]` | Send one CAN frame |
 | `0x1A` | `CMD.SEND_CAN_FRAMES` | `[count][can_id_u32_le][dlc][data8]...` | Send a batch of CAN frames |
+| `0x1B` | `CMD.SYNC_TIME` | `[year_u16_le][month][day][hour][min][sec][force]` | Sent on every connect to a ClaytonDisplay; the display only uses it while its clock is unset |
 
 ### Command Encoding
 
@@ -285,7 +280,7 @@ export function encodeSendCanFrames(frames) { ... }
 
 ## 8. CAN Gateway Parsing
 
-Dashboard and Settings are decoded from CAN frames in `src/services/canGatewayService.js`.
+Dashboard and Settings are decoded from CAN frames in `src/devices/display/displayDevice.js`.
 
 - Broadcast telemetry uses Clayton/J1939 `0x18FF`, `0x19FF`, and `0x14FF` frames.
 - Unit discovery sends `0x18EAFFFE` requests and decodes identification responses.
@@ -294,7 +289,25 @@ Dashboard and Settings are decoded from CAN frames in `src/services/canGatewaySe
 
 ---
 
-## 9. Components
+## 9. Device Layer
+
+The app talks to two BLE chips: a ClaytonDisplay (CAN gateway, many units, firmware update) and the LPS2 built-in module (one unit, no CAN, no firmware update; see [LPS2-BLE-Protocol.md](LPS2-BLE-Protocol.md)). Screens only use `deviceSession`, which forwards to `displayDevice` or `lps2Device` and exposes `capabilities` (`multiUnit`, `settings`, `firmwareUpdate`). Both drivers emit the same `dashboard` snapshot defined in `dashboardModel.js`.
+
+---
+
+## 10. Background Connection and Notifications
+
+Settings › APP › *Background notifications* (off by default, Android first):
+
+- The last connected unit is remembered (`prefs.js`). `backgroundService.js` reconnects to it with Android `autoConnect`, which waits at low power until the unit is in range — no scanning. Reconnecting runs while the app is open, or always when the setting is on. Pressing DISCONNECT stops it until the user connects again.
+- With the setting on, `modules/ble-foreground` runs an Android foreground service of type `connectedDevice`. It keeps the app process (and the JS BLE link) alive and shows the ongoing notification Android requires. It is started while the app is in the foreground; afterwards only its text is updated.
+- `alertMonitor.js` reads the normal dashboard snapshots and posts notifications only while the app is in the background: every new error code (all levels), SoC below 20 % (re-armed above 25 %), and 100 % while charging (re-armed below 95 %). State is kept per unit, so returning to the background never repeats what was already shown.
+- Permissions: `POST_NOTIFICATIONS` (asked when the setting is turned on), `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` (declared by the module).
+- Limits: phone makers' battery savers can still kill the service; a phone restart stops it until the app is opened again. iOS is not covered yet.
+
+---
+
+## 11. Components
 
 The UI follows the Carbon Blue language shared with the display. The full
 visual spec is in [Carbon Blue App-spec.md](Carbon%20Blue%20App-spec.md);
@@ -314,7 +327,7 @@ Dashboard polling (`requestDashboard()` every 2 s) runs in `App.js` while BLE is
 
 ---
 
-## 10. Theme
+## 12. Theme
 
 Carbon Blue tokens in `src/utils/theme.js` (identical values to the display):
 

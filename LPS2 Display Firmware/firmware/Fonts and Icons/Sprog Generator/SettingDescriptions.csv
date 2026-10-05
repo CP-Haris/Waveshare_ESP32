@@ -1,0 +1,7 @@
+Variable Name;ENG;DK
+DESC_Jumpstart;Charging the start battery. Attempt to start vehicle after approx. 4 min. ;Lader startbatteriet. Vent ca. 4 min med at starte køretøjet.
+DESC_ACOutTime;Time until shutdown after period with no load.;Tid uden belastning indtil dvale aktiveres.
+DESC_ACOutWatt;Power level to activate Energy Saver (less than).;Power niveau for aktivering af Dvaletilstand (mindre end).
+DESC_ACInMaxCurrent;Limit of 230VAC In consumption.;Begrænsning af 230VAC Ind forbrug.
+DESC_DCOutTime;Deactivation delay for shutdown of 12VDC Output.;Forsinket nedlukning af 12VDC Ud.
+DESC_Language;Set language.;Skift sprog.

@@ -43,7 +43,14 @@
     },
     "owner": "cp_haris",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#4E9EEB"
+        }
+      ]
     ],
     "backgroundColor": "#0B0C0E"
   }

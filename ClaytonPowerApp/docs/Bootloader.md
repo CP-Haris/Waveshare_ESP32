@@ -1,6 +1,6 @@
 # Firmware Update Bootloader
 
-Dette dokument beskriver hvordan firmware update-flowet i ClaytonPowerApp virker. Fokus er den mobile implementation i `src/services/firmwareUpdateService.js`, som opdaterer LPS/BMS-moduler via BLE til ESP32-gateway og videre ud på CAN.
+Dette dokument beskriver hvordan firmware update-flowet i ClaytonPowerApp virker. Fokus er den mobile implementation i `src/devices/display/firmwareUpdateService.js`, som opdaterer LPS/BMS-moduler via BLE til ESP32-gateway og videre ud på CAN.
 
 ## Kort overblik
 
@@ -306,8 +306,8 @@ Firmware Update-skærmen bruger teksten `Uploading block X/Y` til at vise packag
 | Fil | Ansvar |
 | --- | --- |
 | `src/screens/FirmwareUpdateScreen.js` | UI, targetvisning, module labels, start/cancel, progress/result. |
-| `src/services/firmwareUpdateService.js` | Discovery, update-plan, bootloader state machine, CAN/BLE transport, retry og cleanup. |
-| `src/utils/protocol.js` | BLE command encoders/decoders, inkl. CAN frame og CAN frame batching. |
+| `src/devices/display/firmwareUpdateService.js` | Discovery, update-plan, bootloader state machine, CAN/BLE transport, retry og cleanup. |
+| `src/devices/display/displayProtocol.js` | BLE command encoders/decoders, inkl. CAN frame og CAN frame batching. |
 | ESP32 `ClaytonDisplay` firmware | BLE gateway og CAN forwarding. |
 
 ## Ting man ikke bør ændre uden hardwaretest

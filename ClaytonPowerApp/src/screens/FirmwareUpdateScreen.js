@@ -8,9 +8,8 @@ import {
 import StatusBar from '../components/StatusBar';
 import { Button, Notice, Row, ScreenTitle, Section } from '../components/Carbon';
 import { colors, font, spacing, type } from '../utils/theme';
-import firmwareUpdateService from '../services/firmwareUpdateService';
-import bleService from '../services/bleService';
-import canGatewayService from '../services/canGatewayService';
+import firmwareUpdateService from '../devices/display/firmwareUpdateService';
+import deviceSession from '../devices/deviceSession';
 
 const DEFAULT_API_BASE = 'http://49.12.206.181/firmware-api';
 const DEFAULT_API_KEY = 'ff871ffebf04c37e60bafbc9dfcca0fdaec9d82b20d0febf351bf0819b457f10';
@@ -37,7 +36,7 @@ export default function FirmwareUpdateScreen({ route }) {
   const partFromRoute = route?.params?.partNumber || '';
   const canIdFromRoute = route?.params?.canId;
 
-  const [connected, setConnected] = useState(bleService.isConnected);
+  const [connected, setConnected] = useState(deviceSession.isConnected);
   const [target, setTarget] = useState(null);
   const [targetLoading, setTargetLoading] = useState(false);
   const [targetError, setTargetError] = useState('');
@@ -50,7 +49,7 @@ export default function FirmwareUpdateScreen({ route }) {
   const [transferTotal, setTransferTotal] = useState(0);
   const [result, setResult] = useState(null);
   const abortRef = useRef(null);
-  const selectedUnitIndexRef = useRef(canGatewayService.getActiveUnitInfo()?.index ?? null);
+  const selectedUnitIndexRef = useRef(deviceSession.getActiveUnitInfo()?.index ?? null);
 
   const transferPercent = useMemo(() => {
     if (transferTotal <= 0) return 0;
@@ -90,7 +89,7 @@ export default function FirmwareUpdateScreen({ route }) {
   }, []);
 
   const getTargetPreferences = useCallback(() => {
-    const activeUnit = canGatewayService.getActiveUnitInfo();
+    const activeUnit = deviceSession.getActiveUnitInfo();
     const activeCanId = Number.isFinite(activeUnit?.addr) ? activeUnit.addr : null;
     return {
       preferredCanId: canIdFromRoute ?? activeCanId ?? null,
@@ -100,7 +99,7 @@ export default function FirmwareUpdateScreen({ route }) {
   }, [canIdFromRoute, partFromRoute, serialFromRoute]);
 
   const detectTarget = useCallback(async () => {
-    if (!bleService.isConnected) {
+    if (!deviceSession.isConnected) {
       setTarget(null);
       setUpdatePlan([]);
       setPlanError('');
@@ -145,7 +144,7 @@ export default function FirmwareUpdateScreen({ route }) {
 
   useEffect(() => {
     const syncSelectedUnit = () => {
-      const nextIndex = canGatewayService.getActiveUnitInfo()?.index ?? null;
+      const nextIndex = deviceSession.getActiveUnitInfo()?.index ?? null;
       if (selectedUnitIndexRef.current === nextIndex) return;
 
       selectedUnitIndexRef.current = nextIndex;
@@ -153,7 +152,7 @@ export default function FirmwareUpdateScreen({ route }) {
       setUpdatePlan([]);
       setPlanError('');
 
-      if (!bleService.isConnected) return;
+      if (!deviceSession.isConnected) return;
       if (nextIndex == null) {
         setTargetError('Select a unit in the header before scanning');
         return;
@@ -161,7 +160,7 @@ export default function FirmwareUpdateScreen({ route }) {
       if (!running && !targetLoading) detectTarget();
     };
 
-    const unsub = canGatewayService.onNotification((message) => {
+    const unsub = deviceSession.onNotification((message) => {
       if (message.type === 'unitInfo' || message.type === 'dashboard') syncSelectedUnit();
     });
 
@@ -170,7 +169,7 @@ export default function FirmwareUpdateScreen({ route }) {
   }, [detectTarget, running, targetLoading]);
 
   useEffect(() => {
-    const unsub = bleService.onConnectionChange((isConnected) => {
+    const unsub = deviceSession.onConnectionChange((isConnected) => {
       setConnected(isConnected);
       if (!isConnected) {
         setTarget(null);
@@ -182,7 +181,7 @@ export default function FirmwareUpdateScreen({ route }) {
       }
     });
 
-    if (bleService.isConnected) {
+    if (deviceSession.isConnected) {
       detectTarget();
     } else {
       setTargetError('BLE not connected');

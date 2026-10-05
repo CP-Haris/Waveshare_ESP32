@@ -1456,6 +1456,16 @@ static lv_obj_t *ble_pin_label;
 static volatile bool ble_pairing_popup_requested = false;
 static volatile uint32_t ble_pairing_popup_passkey = 0;
 
+// Time from the app (BLE_CMD_SYNC_TIME). Received on the BLE thread, applied
+// in the main loop so the RTC's I2C access stays out of the BLE callback.
+typedef struct {
+    int year, month, day, hour, min, sec;
+    bool force;
+} ble_time_sync_t;
+static ble_time_sync_t ble_time_sync;
+static volatile bool ble_time_sync_requested = false;
+static portMUX_TYPE ble_time_sync_lock = portMUX_INITIALIZER_UNLOCKED;
+
 // Settings detail
 static lv_obj_t *detail_content;
 static int detail_cat_idx = -1;
@@ -1477,6 +1487,16 @@ static lv_obj_t *clock_rollers[5];
 static lv_obj_t *clock_row_val;      // value label on the "Set Clock" row
 #define CLOCK_YEAR_MIN 2024
 #define CLOCK_YEAR_MAX 2040
+
+// The RTC counts as unset (first power-up, battery lost) until it holds a
+// date from CLOCK_YEAR_MIN on — the header shows --:-- and the app may set it.
+static bool clock_is_set(void)
+{
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    return lt.tm_year + 1900 >= CLOCK_YEAR_MIN;
+}
 
 // ---------------------------------------------------------------------------
 //  Helper Functions
@@ -3505,6 +3525,29 @@ static void ble_cmd_handler(uint8_t cmd, const uint8_t *payload, uint16_t len)
         }
         break;
 
+    case BLE_CMD_SYNC_TIME:
+        if (len >= 8) {
+            ble_time_sync_t t = {
+                .year  = payload[0] | (payload[1] << 8),
+                .month = payload[2], .day = payload[3],
+                .hour  = payload[4], .min = payload[5], .sec = payload[6],
+                .force = payload[7] != 0,
+            };
+            bool valid = t.year >= CLOCK_YEAR_MIN && t.year <= CLOCK_YEAR_MAX &&
+                         t.month >= 1 && t.month <= 12 && t.day >= 1 && t.day <= 31 &&
+                         t.hour < 24 && t.min < 60 && t.sec < 60;
+            if (valid) {
+                taskENTER_CRITICAL(&ble_time_sync_lock);
+                ble_time_sync = t;
+                ble_time_sync_requested = true;
+                taskEXIT_CRITICAL(&ble_time_sync_lock);
+            } else {
+                ESP_LOGW(TAG, "[BLE] Ignoring invalid time %d-%d-%d %d:%d:%d",
+                         t.year, t.month, t.day, t.hour, t.min, t.sec);
+            }
+        }
+        break;
+
     default:
         ESP_LOGW(TAG, "[BLE] Unknown cmd 0x%02X", cmd);
         break;
@@ -3817,6 +3860,20 @@ void can_hmi_task(void *arg)
             last_ui_update = now;
         }
 
+        // ---- Clock sync from the app: only fills in an unset clock ----
+        if (ble_time_sync_requested) {
+            taskENTER_CRITICAL(&ble_time_sync_lock);
+            ble_time_sync_t t = ble_time_sync;
+            ble_time_sync_requested = false;
+            taskEXIT_CRITICAL(&ble_time_sync_lock);
+
+            if (t.force || !clock_is_set()) {
+                rtc_pcf85063_set_datetime(t.year, t.month, t.day, t.hour, t.min, t.sec);
+                ESP_LOGI(TAG, "Clock set from app: %04d-%02d-%02d %02d:%02d:%02d",
+                         t.year, t.month, t.day, t.hour, t.min, t.sec);
+            }
+        }
+
         // ---- Status icons: USB applied on every CHANGE (checked each loop
         //      iteration — the live tud state reads are cheap), BLE at 1 Hz.
         //      A failed lock retries next iteration instead of next second.
@@ -3844,7 +3901,7 @@ void can_hmi_task(void *arg)
                 time_t tnow = time(NULL);
                 struct tm lt;
                 localtime_r(&tnow, &lt);
-                if (lt.tm_year + 1900 >= 2024) {
+                if (clock_is_set()) {
                     snprintf(clk, sizeof(clk), "%02d:%02d", lt.tm_hour, lt.tm_min);
                 } else {
                     snprintf(clk, sizeof(clk), "--:--");

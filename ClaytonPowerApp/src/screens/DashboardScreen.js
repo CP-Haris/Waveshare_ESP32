@@ -9,8 +9,8 @@ import { Button } from '../components/Carbon';
 import { colors, font, spacing, type } from '../utils/theme';
 import { unitFamily } from '../utils/units';
 import { recordSoc } from '../services/socHistory';
-import bleService from '../services/bleService';
-import canGatewayService from '../services/canGatewayService';
+import deviceSession from '../devices/deviceSession';
+import { emptyFunctions } from '../devices/dashboardModel';
 
 // Gauge full scale until CAN-provided maxima are wired in — same fallbacks
 // as the firmware's CAP_* defines (spec §6.2).
@@ -69,21 +69,21 @@ export default function DashboardScreen({ navigation }) {
   const [bodyHeight, setBodyHeight] = useState(0);
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
-  const [connected, setConnected] = useState(bleService.isConnected);
+  const [connected, setConnected] = useState(deviceSession.isConnected);
 
   useEffect(() => {
-    const unsubData = canGatewayService.onNotification((msg) => {
+    const unsubData = deviceSession.onNotification((msg) => {
       if (msg.type !== 'dashboard') return;
       const soc = Math.max(0, Math.min(100, Math.round(finite(msg.data.soc))));
       const unitKey = msg.data.serial || msg.data.partNumber || 'unit';
       setHistory(recordSoc(unitKey, soc));
       setData(msg.data);
     });
-    const unsubConn = bleService.onConnectionChange((c) => {
+    const unsubConn = deviceSession.onConnectionChange((c) => {
       setConnected(c);
       if (!c) setData(null);
     });
-    if (bleService.isConnected) canGatewayService.requestDashboard();
+    if (deviceSession.isConnected) deviceSession.requestDashboard();
     return () => {
       unsubData();
       unsubConn();
@@ -112,17 +112,18 @@ export default function DashboardScreen({ navigation }) {
   const discharging = finite(d.batteryCurrent) < -0.5;
   const minutesLeft = Math.abs(Math.round(finite(d.socTimeMin)));
 
-  const pAcIn = finite(d.acInPower);
-  const pDcIn = Math.max(0, finite(d.dcInVoltage) * finite(d.dcInCurrent));
-  const pSolar = Math.max(0, finite(d.solarCurrent) * finite(d.batteryVoltage));
-  const pAcOut = finite(d.acOutPower);
-  const pDcOut = Math.max(0, finite(d.dcOutVoltage) * finite(d.dcOutCurrent));
+  const fn = { ...emptyFunctions(), ...d.functions };
+  const pAcIn = fn.acIn.powerW;
+  const pDcIn = fn.dcIn.powerW;
+  const pSolar = fn.solar.powerW;
+  const pAcOut = fn.acOut.powerW;
+  const pDcOut = fn.dcOut.powerW;
 
-  const acIn = dialState(d.chargerState, d.chargerFail, pAcIn, CAP.acIn);
-  const dcIn = dialState(d.dcInState, d.dcInFail, pDcIn, CAP.dcIn);
-  const solar = dialState(d.solarState, d.solarFail, pSolar, CAP.solar);
-  const acOut = dialState(d.inverterState, d.inverterFail, pAcOut, CAP.acOut);
-  const dcOut = dialState(d.dcOutState, d.dcOutFail, pDcOut, CAP.dcOut);
+  const acIn = dialState(fn.acIn, CAP.acIn);
+  const dcIn = dialState(fn.dcIn, CAP.dcIn);
+  const solar = dialState(fn.solar, CAP.solar);
+  const acOut = dialState(fn.acOut, CAP.acOut);
+  const dcOut = dialState(fn.dcOut, CAP.dcOut);
 
   const shown = (s, p) => (s.state === 'off' || s.state === 'blocked' ? 0 : p);
   const chgTotal = shown(acIn, pAcIn) + shown(dcIn, pDcIn) + shown(solar, pSolar);
@@ -181,13 +182,13 @@ export default function DashboardScreen({ navigation }) {
               columns (plug / sun); a BMS shows DC out alone in the middle. */}
           <View style={styles.dialRow}>
             {isBms ? <View style={{ width: dialSize }} /> : (
-              <Dial size={dialSize} icon="socket" {...acOut} powerW={pAcOut} onPress={() => canGatewayService.toggleFunc(0)} />
+              <Dial size={dialSize} icon="socket" {...acOut} powerW={pAcOut} onPress={() => deviceSession.toggleOutput('ac')} />
             )}
             {isBms ? (
-              <Dial size={dialSize} icon="dc" {...dcOut} powerW={pDcOut} onPress={() => canGatewayService.toggleFunc(1)} />
+              <Dial size={dialSize} icon="dc" {...dcOut} powerW={pDcOut} onPress={() => deviceSession.toggleOutput('dc')} />
             ) : <View style={{ width: dialSize }} />}
             {isBms ? <View style={{ width: dialSize }} /> : (
-              <Dial size={dialSize} icon="dc" {...dcOut} powerW={pDcOut} onPress={() => canGatewayService.toggleFunc(1)} />
+              <Dial size={dialSize} icon="dc" {...dcOut} powerW={pDcOut} onPress={() => deviceSession.toggleOutput('dc')} />
             )}
           </View>
         </View>

@@ -3774,8 +3774,16 @@ void can_hmi_task(void *arg)
         // and wake-step breadcrumb from the PREVIOUS boot (crash diagnosis).
         uint32_t now_bo = now_ms();
         if (now_bo - last_heartbeat >= 10000) {
-            ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d rst=%d ws=0x%lX",
-                     (unsigned long)now_bo, pwr_state, boot_rst, (unsigned long)boot_ws);
+            // TWAI health: tec/rec = TX/RX error counters, txq = frames still
+            // waiting (TX that never gets ACKed piles up here).
+            twai_status_info_t st = {0};
+            twai_get_status_info(&st);
+            ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d rst=%d ws=0x%lX | can state=%lu tec=%lu rec=%lu"
+                     " txq=%lu tx_failed=%lu bus_err=%lu",
+                     (unsigned long)now_bo, pwr_state, boot_rst, (unsigned long)boot_ws,
+                     (unsigned long)st.state, (unsigned long)st.tx_error_counter,
+                     (unsigned long)st.rx_error_counter, (unsigned long)st.msgs_to_tx,
+                     (unsigned long)st.tx_failed_count, (unsigned long)st.bus_error_count);
             last_heartbeat = now_bo;
         }
 

@@ -8,7 +8,6 @@
  *   - lvgl_port.h      -> LVGL_PORT_H_RES / V_RES + ESP_PANEL_USE_1024_600_LCD
  *   - waveshare_*.c/h  -> pixel clock, porch timings, GT911 x_max/y_max
  *   - can_hmi.c        -> SCREEN_W / SCREEN_H, settings grid, row widths, splash
- *   - dashboard_ui.c   -> picks the full or the compact dashboard layout
  *
  * The PC simulator includes this header too (../main is on its include path)
  * and uses it as its default window size; it can be overridden at runtime with
@@ -44,15 +43,6 @@
  * See docs/"New Display - Netlist" and memory note new-display-pcb. */
 #ifndef BOARD_CP_DISPLAY
 #define BOARD_CP_DISPLAY  (1)
-#endif
-
-/* ===== Skin switch: 0 = classic "Midnight" dashboard (dashboard_ui.c),
- *                    1 = "Carbon Blue" instrument skin (dashboard_carbon.c).
- * Both files implement the same dashboard_ui.h API; exactly one is compiled
- * in (the other compiles to an empty translation unit), so callers and the
- * PC simulator need no changes when switching. */
-#ifndef UI_SKIN_CARBON
-#define UI_SKIN_CARBON  (1)
 #endif
 
 #endif /* UI_SCREEN_H */

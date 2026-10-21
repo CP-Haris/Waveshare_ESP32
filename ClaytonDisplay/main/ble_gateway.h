@@ -62,6 +62,7 @@ void ble_gateway_set_standby(bool standby);
 // ---------------------------------------------------------------------------
 //  Callback — called from BLE RX to be handled by can_hmi
 // ---------------------------------------------------------------------------
+// A disconnect is also reported, as BLE_CMD_SET_CAN_PASSTHROUGH [0].
 typedef void (*ble_cmd_callback_t)(uint8_t cmd, const uint8_t *payload, uint16_t len);
 void ble_gateway_set_cmd_callback(ble_cmd_callback_t cb);
 

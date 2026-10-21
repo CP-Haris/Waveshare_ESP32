@@ -6,6 +6,7 @@
 
 #include "waveshare_rgb_lcd_port.h"
 #include "soc/gpio_reg.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "waveshare_lcd";
 
@@ -53,10 +54,12 @@ static esp_err_t i2c_write_bytes(uint8_t dev_addr, const uint8_t *data, size_t l
     return ret;
 }
 
+#if !BOARD_CP_DISPLAY
 static esp_err_t i2c_write_byte(uint8_t dev_addr, uint8_t data)
 {
     return i2c_write_bytes(dev_addr, &data, 1);
 }
+#endif
 
 /* ---------------------------------------------------------------------------
  * IO-expander access layer. All expander outputs go through a shadow byte so
@@ -102,10 +105,21 @@ static esp_err_t exp_flush(void)
 #endif
 }
 
+/* The shadow is changed from several tasks (buzzer esp_timer, backlight and
+ * CAN_S from the HMI task), so read-modify-write and flush under one mutex. */
+static SemaphoreHandle_t s_exp_mutex;
+
 static esp_err_t exp_update(uint8_t set_bits, uint8_t clear_bits)
 {
+    if (!s_exp_mutex) {
+        static StaticSemaphore_t s_exp_mutex_buf;
+        s_exp_mutex = xSemaphoreCreateMutexStatic(&s_exp_mutex_buf);
+    }
+    xSemaphoreTake(s_exp_mutex, portMAX_DELAY);
     s_exp_shadow = (uint8_t)((s_exp_shadow | set_bits) & ~clear_bits);
-    return exp_flush();
+    esp_err_t err = exp_flush();
+    xSemaphoreGive(s_exp_mutex);
+    return err;
 }
 
 /* Recover a jammed I2C bus before the driver takes the pins. The GT911 powers
@@ -477,7 +491,7 @@ esp_err_t waveshare_ch422g_wake(void)
     // CH422G: any I2C write wakes it (SLEEP bit auto-clears).
     // PCA9554 has no sleep state — re-flushing the shadow is harmless and
     // restores the outputs in case the chip lost power in between.
-    return exp_flush();
+    return exp_update(0, 0);
 }
 
 /******************************* CAN transceiver standby ***************************/

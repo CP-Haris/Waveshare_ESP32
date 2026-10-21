@@ -2,9 +2,8 @@
  * @file dashboard_carbon.c
  * @brief "Carbon Blue" dashboard skin (pure LVGL 8.4).
  *
- * Implements the same dashboard_ui.h API as the classic skin, selected with
- * UI_SKIN_CARBON in ui_screen.h. Design reference: the Carbon Blue design
- * specification (docs/design artifacts).
+ * Implements the dashboard_ui.h API. Design reference: the Carbon Blue design
+ * specification (docs/Carbon Blue Designspec Display.pdf).
  *
  * Layout (800x480 reference, scaled proportionally on 1024x600):
  *
@@ -32,7 +31,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#if UI_SKIN_CARBON
 
 /* Barlow Semi Condensed (OFL) at the spec sizes — generated with lv_font_conv
  * into main/fonts/. Symbol glyphs (chevrons, header icons) still come from
@@ -57,8 +55,9 @@ extern const lv_img_dsc_t cb_ic_plug, cb_ic_car, cb_ic_sun, cb_ic_socket, cb_ic_
 #define CB_INK      lv_color_hex(0xEFEDE8)   /* text, arcs, chevrons        */
 #define CB_DIM      lv_color_hex(0x82868C)   /* secondary text, off-icons   */
 #define CB_FAINT    lv_color_hex(0x4A4E54)   /* micro text, idle sys icons  */
+#define CB_BLUE_HEX "4E9EEB"                 /* for LVGL text recolor "#...#" */
 #define CB_BLUE     lv_color_hex(0x4E9EEB)   /* Clayton blue                */
-#define CB_BLUE_DIM lv_color_hex(0x2F5F8C)   /* prognosis projection line   */
+#define CB_SOFT     lv_color_hex(0xB9BCB6)   /* prognosis line body text    */
 #define CB_YELLOW   lv_color_hex(0xE6C84A)   /* overload / warning          */
 #define CB_RED      lv_color_hex(0xE25454)   /* blocked / fault / critical  */
 #define CB_BTN_EDGE lv_color_hex(0x3E434A)   /* circular button border      */
@@ -144,6 +143,9 @@ static int16_t  g_hist[NOW_IDX + 1];
 static int      g_hist_count = 0;
 static bool     g_hist_init = false;
 static uint32_t g_last_sample;
+static bool     g_hist_dirty = true;      /* curve changed since last redraw */
+static bool     g_drawn_charging, g_drawn_discharging;
+static int      g_drawn_tmin = -1;
 
 /* Cached clock, parsed for the prognosis target time (-1 = invalid) */
 static int g_clock_min = -1;
@@ -151,10 +153,21 @@ static int g_clock_min = -1;
 /*==========================================================================
  *  Helpers
  *========================================================================*/
-static void set_text_if_changed(lv_obj_t *label, const char *text)
+/* Every LVGL setter invalidates the object even when nothing changes, so the
+ * per-tick update only touches what actually differs. Returns true when the
+ * text changed (callers then re-align). */
+static bool set_text_if_changed(lv_obj_t *label, const char *text)
 {
     const char *cur = lv_label_get_text(label);
-    if (!cur || strcmp(cur, text) != 0) lv_label_set_text(label, text);
+    if (cur && strcmp(cur, text) == 0) return false;
+    lv_label_set_text(label, text);
+    return true;
+}
+
+static void set_text_color_if_changed(lv_obj_t *obj, lv_color_t c)
+{
+    if (lv_obj_get_style_text_color(obj, 0).full != c.full)
+        lv_obj_set_style_text_color(obj, c, 0);
 }
 
 /* Icon color IS the state: grey=off, blue=on, red=blocked/fault, yellow=overload. */
@@ -596,7 +609,7 @@ void dashboard_ui_create(lv_obj_t *parent, const dashboard_callbacks_t *cb)
     g_until = lv_label_create(lz);
     lv_label_set_recolor(g_until, true);
     lv_label_set_text(g_until, "");
-    lv_obj_set_style_text_color(g_until, lv_color_hex(0xB9BCB6), 0);
+    lv_obj_set_style_text_color(g_until, CB_SOFT, 0);
     lv_obj_set_style_text_font(g_until, &cb_font_16, 0);
     lv_obj_align(g_until, LV_ALIGN_TOP_MID, 0, SY(352));
 
@@ -676,7 +689,14 @@ void dashboard_ui_set_chart_window(int hours)
     g_win_hours = hours;
     g_sample_ms = (uint32_t)hours * 3600000u / (2u * NOW_IDX);
     g_hist_init = false;   /* restart the buffer from the next SoC sample */
+    g_hist_dirty = true;
     update_time_axis();
+}
+
+void dashboard_ui_reset_history(void)
+{
+    g_hist_init = false;   /* restart the buffer from the next SoC sample */
+    g_hist_dirty = true;
 }
 
 void dashboard_ui_set_clock(const char *hhmm)
@@ -695,7 +715,7 @@ void dashboard_ui_set_clock(const char *hhmm)
 void dashboard_ui_set_ble(bool connected)
 {
     if (!g_ble_icon) return;
-    lv_obj_set_style_text_color(g_ble_icon, connected ? CB_BLUE : CB_FAINT, 0);
+    set_text_color_if_changed(g_ble_icon, connected ? CB_BLUE : CB_FAINT);
 }
 
 void dashboard_ui_set_usb(dash_usb_status_t status)
@@ -710,8 +730,7 @@ void dashboard_ui_set_usb(dash_usb_status_t status)
 
     const char *tag = (status == DASH_USB_MODEM) ? "CAN"
                     : (status == DASH_USB_DEBUG) ? "DBG" : "";
-    lv_obj_set_style_text_color(g_usb_icon,
-        (status == DASH_USB_IDLE) ? CB_FAINT : CB_INK, 0);
+    set_text_color_if_changed(g_usb_icon, (status == DASH_USB_IDLE) ? CB_FAINT : CB_INK);
     if (tag[0]) {
         set_text_if_changed(g_usb_lbl, tag);
         lv_obj_clear_flag(g_usb_lbl, LV_OBJ_FLAG_HIDDEN);
@@ -731,8 +750,9 @@ static bool set_dial(lv_obj_t *arc, lv_obj_t *icon,
                      int8_t st, uint8_t fail)
 {
     bool overload = (st >= 1 && fail < 3 && cap_w > 0 && power_w > cap_w);
-    lv_obj_set_style_img_recolor(icon,
-        overload ? CB_YELLOW : func_color(st, fail), 0);
+    lv_color_t ic = overload ? CB_YELLOW : func_color(st, fail);
+    if (lv_obj_get_style_img_recolor(icon, 0).full != ic.full)
+        lv_obj_set_style_img_recolor(icon, ic, 0);
 
     int pct;
     if (overload)                pct = 100;
@@ -742,15 +762,17 @@ static bool set_dial(lv_obj_t *arc, lv_obj_t *icon,
         if (pct > 100) pct = 100;
         if (pct < 0)   pct = 0;
     }
-    lv_arc_set_value(arc, pct);
-    lv_obj_set_style_arc_color(arc, overload ? CB_YELLOW : CB_INK, LV_PART_INDICATOR);
+    lv_arc_set_value(arc, pct);                 /* no-op when unchanged */
+    lv_color_t ac = overload ? CB_YELLOW : CB_INK;
+    if (lv_obj_get_style_arc_color(arc, LV_PART_INDICATOR).full != ac.full)
+        lv_obj_set_style_arc_color(arc, ac, LV_PART_INDICATOR);
 
     char buf[20];
     bool zero = (fail >= 3 || st < 1);
     snprintf(buf, sizeof(buf), "%d", zero ? 0 : power_w);
-    set_text_if_changed(val, buf);
-    lv_obj_set_style_text_color(val, zero ? CB_DIM : CB_INK, 0);
-    place_value_pair(val, unit, anchor, dy);
+    if (set_text_if_changed(val, buf))
+        place_value_pair(val, unit, anchor, dy);
+    set_text_color_if_changed(val, zero ? CB_DIM : CB_INK);
     return overload;
 }
 
@@ -838,22 +860,42 @@ static void update_time_axis(void)
  * dashed projection overlay, the "now" dot and the target ring. The
  * projection is TIME-TRUE on the right half: it reaches 100/0 where the
  * remaining time (tmin) actually lands on the axis, then runs flat. */
-static void update_chart(int soc, bool charging, bool discharging, int tmin)
+static void update_chart(uint32_t now, int soc, bool charging, bool discharging, int tmin)
 {
-    uint32_t now = lv_tick_get();
     if (!g_hist_init) {
         g_hist[NOW_IDX] = (int16_t)soc;
         g_hist_count = 1;
         g_hist_init = true;
         g_last_sample = now;
     } else if (now - g_last_sample >= g_sample_ms) {
-        memmove(&g_hist[0], &g_hist[1], NOW_IDX * sizeof(g_hist[0]));
-        g_hist[NOW_IDX] = (int16_t)soc;
-        if (g_hist_count <= NOW_IDX) g_hist_count++;
-        g_last_sample = now;
-    } else {
+        /* One slot per elapsed period, so time spent on other pages or in
+         * standby still moves the history. Missed slots are interpolated
+         * between the last known and the current SoC. */
+        uint32_t periods = (now - g_last_sample) / g_sample_ms;
+        bool whole_window = periods > NOW_IDX;
+        if (whole_window) periods = NOW_IDX + 1;
+        int prev = g_hist[NOW_IDX];
+        for (uint32_t k = 1; k <= periods; k++) {
+            memmove(&g_hist[0], &g_hist[1], NOW_IDX * sizeof(g_hist[0]));
+            g_hist[NOW_IDX] = (int16_t)(prev + (soc - prev) * (int)k / (int)periods);
+            if (g_hist_count <= NOW_IDX) g_hist_count++;
+        }
+        g_last_sample = whole_window ? now : g_last_sample + periods * g_sample_ms;
+        g_hist_dirty = true;
+    } else if (g_hist[NOW_IDX] != soc) {
         g_hist[NOW_IDX] = (int16_t)soc;   /* live head */
+        g_hist_dirty = true;
     }
+
+    /* Redraw only when the curve or the projection inputs changed: the chart
+     * fill is the most expensive thing on the screen. */
+    if (!g_hist_dirty && charging == g_drawn_charging &&
+        discharging == g_drawn_discharging && tmin == g_drawn_tmin)
+        return;
+    g_hist_dirty = false;
+    g_drawn_charging = charging;
+    g_drawn_discharging = discharging;
+    g_drawn_tmin = tmin;
 
     /* Real samples sit right-aligned against "now"; older slots stay NONE */
     int first = NOW_IDX + 1 - g_hist_count;
@@ -903,21 +945,22 @@ static void update_until(bool charging, bool discharging, int tmin)
         int h = tmin / 60, mm = tmin % 60;
         if (g_clock_min >= 0) {
             int tgt = (g_clock_min + tmin) % (24 * 60);
-            snprintf(buf, sizeof(buf), "#4E9EEB %s KL. %02d:%02d#  ·  OM %dH %02dM",
+            snprintf(buf, sizeof(buf), "#" CB_BLUE_HEX " %s KL. %02d:%02d#  ·  OM %dH %02dM",
                      word, tgt / 60, tgt % 60, h, mm);
         } else {
-            snprintf(buf, sizeof(buf), "#4E9EEB %s#  OM %dH %02dM", word, h, mm);
+            snprintf(buf, sizeof(buf), "#" CB_BLUE_HEX " %s#  OM %dH %02dM", word, h, mm);
         }
     } else if (charging) {
-        snprintf(buf, sizeof(buf), "#4E9EEB OPLADER#");
+        snprintf(buf, sizeof(buf), "#" CB_BLUE_HEX " OPLADER#");
     } else if (discharging) {
         snprintf(buf, sizeof(buf), "AFLADER");
     } else {
         snprintf(buf, sizeof(buf), "STANDBY");
     }
-    set_text_if_changed(g_until, buf);
-    lv_obj_update_layout(g_until);
-    lv_obj_align(g_until, LV_ALIGN_TOP_MID, 0, SY(352));
+    if (set_text_if_changed(g_until, buf)) {
+        lv_obj_update_layout(g_until);
+        lv_obj_align(g_until, LV_ALIGN_TOP_MID, 0, SY(352));
+    }
 }
 
 /*==========================================================================
@@ -931,7 +974,9 @@ void dashboard_ui_update(const dashboard_model_t *m)
     if (m->dev_sel_visible) {
         lv_obj_clear_flag(g_dev_sel, LV_OBJ_FLAG_HIDDEN);
         if (m->dev_name) set_text_if_changed(g_dev_name, m->dev_name);
-        lv_obj_set_style_bg_color(g_dev_dot, m->dev_online ? CB_BLUE : CB_DIM, 0);
+        lv_color_t dc = m->dev_online ? CB_BLUE : CB_DIM;
+        if (lv_obj_get_style_bg_color(g_dev_dot, 0).full != dc.full)
+            lv_obj_set_style_bg_color(g_dev_dot, dc, 0);
     } else {
         lv_obj_add_flag(g_dev_sel, LV_OBJ_FLAG_HIDDEN);
     }
@@ -942,16 +987,17 @@ void dashboard_ui_update(const dashboard_model_t *m)
     if (soc < 0) soc = 0;
     if (soc > 100) soc = 100;
     snprintf(buf, sizeof(buf), "%d", soc);
-    set_text_if_changed(g_soc_pct, buf);
-    lv_obj_update_layout(g_soc_pct);
-    lv_obj_align(g_soc_pct, LV_ALIGN_TOP_MID, -SX(14), SY(34));
-    lv_obj_align_to(g_soc_unit, g_soc_pct, LV_ALIGN_OUT_RIGHT_BOTTOM, SX(3), -SY(10));
+    if (set_text_if_changed(g_soc_pct, buf)) {
+        lv_obj_update_layout(g_soc_pct);
+        lv_obj_align(g_soc_pct, LV_ALIGN_TOP_MID, -SX(14), SY(34));
+        lv_obj_align_to(g_soc_unit, g_soc_pct, LV_ALIGN_OUT_RIGHT_BOTTOM, SX(3), -SY(10));
+    }
 
     /* + = charging (current into the battery), - = discharging */
     bool charging    = m->battery_current_a > 0.5f;
     bool discharging = m->battery_current_a < -0.5f;
     int tmin = m->soc_time_min < 0 ? -m->soc_time_min : m->soc_time_min;
-    update_chart(soc, charging, discharging, tmin);
+    update_chart(m->now_ms, soc, charging, discharging, tmin);
     update_until(charging, discharging, tmin);
 
     /* Powers */
@@ -1008,8 +1054,8 @@ void dashboard_ui_update(const dashboard_model_t *m)
 
         int chg_total = p_ac_in + p_dc_in + p_solar;
         snprintf(buf, sizeof(buf), "%d", chg_total);
-        set_text_if_changed(g_chg_total, buf);
-        place_total(g_chg_total, g_chg_unit);
+        if (set_text_if_changed(g_chg_total, buf))
+            place_total(g_chg_total, g_chg_unit);
         set_chevrons(g_chg_chev, chg_total > 5);
 
         bool inv_ov = set_dial(g_dd_arc[0], g_dd_icon[0], g_dd_val[0], g_dd_unit[0],
@@ -1031,21 +1077,20 @@ void dashboard_ui_update(const dashboard_model_t *m)
 
     int dis_total = (m->is_bms ? 0 : p_ac_out) + p_dc_out;
     snprintf(buf, sizeof(buf), "%d", dis_total);
-    set_text_if_changed(g_dis_total, buf);
-    place_total(g_dis_total, g_dis_unit);
+    if (set_text_if_changed(g_dis_total, buf))
+        place_total(g_dis_total, g_dis_unit);
     set_chevrons(g_dis_chev, dis_total > 5);
 
     /* Error badge: dim outline when clear; colored icon + count when active */
     if (m->error_count > 0) {
         lv_color_t c = m->error_critical ? CB_RED : CB_YELLOW;
-        lv_obj_set_style_text_color(g_err_icon, c, 0);
+        set_text_color_if_changed(g_err_icon, c);
         snprintf(buf, sizeof(buf), "%d", m->error_count);
         set_text_if_changed(g_err_cnt, buf);
-        lv_obj_set_style_text_color(g_err_cnt, c, 0);
+        set_text_color_if_changed(g_err_cnt, c);
     } else {
-        lv_obj_set_style_text_color(g_err_icon, CB_FAINT, 0);
+        set_text_color_if_changed(g_err_icon, CB_FAINT);
         set_text_if_changed(g_err_cnt, "");
     }
 }
 
-#endif /* UI_SKIN_CARBON */

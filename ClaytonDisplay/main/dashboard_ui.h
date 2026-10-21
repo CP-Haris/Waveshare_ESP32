@@ -1,6 +1,6 @@
 /**
  * @file dashboard_ui.h
- * @brief Shared, data-driven dashboard layout for the Clayton Power HMI.
+ * @brief API of the Carbon Blue dashboard (implemented in dashboard_carbon.c).
  *
  * This is the SINGLE source of truth for the dashboard's visual layout. Both
  * the ESP32-S3 firmware (can_hmi.c) and the PC simulator build the dashboard
@@ -14,8 +14,7 @@
  *   3. (optionally) reports BLE state via dashboard_ui_set_ble().
  *
  * The layout is resolution-aware: dashboard_ui_create() reads the display size
- * from LVGL and builds either the full 1024x600 design or a compact 800x480
- * variant. Callers do not need to know which panel is fitted.
+ * from LVGL and scales the 800x480 reference layout to the fitted panel.
  *
  * Target: 1024x600 / 800x480, LVGL 8.4.
  */
@@ -37,6 +36,9 @@ extern "C" {
  *    failure: 0 = ok, >=2 = fault (>=3 = critical/red, else orange)
  */
 typedef struct {
+    uint32_t now_ms;              /* monotonic ms that keeps counting while the
+                                     dashboard is hidden or in standby (drives
+                                     the SoC history timing)                    */
     bool     is_bms;              /* BMS units hide inverter + source cards     */
 
     /* SOC hero */
@@ -118,8 +120,11 @@ void dashboard_ui_set_usb(dash_usb_status_t status);
 
 /** Select how many hours of SoC history the prognosis chart spans (1..24).
  *  The chart's sample buffer restarts on change. Persisting the choice is
- *  the caller's job. No-op in the classic skin (it has no chart). */
+ *  the caller's job. */
 void dashboard_ui_set_chart_window(int hours);
+
+/** Forget the SoC history (e.g. another unit was selected). */
+void dashboard_ui_reset_history(void);
 
 #ifdef __cplusplus
 }

@@ -102,8 +102,6 @@
     #define EXAMPLE_LCD_PIXEL_CLOCK_HZ      (16 * 1000 * 1000)
 #endif
 
-#define EXAMPLE_LCD_BIT_PER_PIXEL       (16)
-#define EXAMPLE_RGB_BIT_PER_PIXEL       (16)
 #define EXAMPLE_RGB_DATA_WIDTH          (16)
 #define EXAMPLE_RGB_BOUNCE_BUFFER_SIZE  (EXAMPLE_LCD_H_RES * CONFIG_EXAMPLE_LCD_RGB_BOUNCE_BUFFER_HEIGHT)
 #define EXAMPLE_LCD_IO_RGB_DISP         (-1)             // -1 if not used
@@ -127,11 +125,6 @@
 #define EXAMPLE_LCD_IO_RGB_DATA13       (GPIO_NUM_42)
 #define EXAMPLE_LCD_IO_RGB_DATA14       (GPIO_NUM_41)
 #define EXAMPLE_LCD_IO_RGB_DATA15       (GPIO_NUM_40)
-
-#define EXAMPLE_LCD_IO_RST              (-1)             // -1 if not used
-#define EXAMPLE_PIN_NUM_BK_LIGHT        (-1)    // -1 if not used
-#define EXAMPLE_LCD_BK_LIGHT_ON_LEVEL   (1)
-#define EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL  !EXAMPLE_LCD_BK_LIGHT_ON_LEVEL
 
 #define EXAMPLE_PIN_NUM_TOUCH_RST       (-1)            // -1 if not used
 #define EXAMPLE_PIN_NUM_TOUCH_INT       (-1)            // -1 if not used

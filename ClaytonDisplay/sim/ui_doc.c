@@ -2,7 +2,7 @@
  * @file ui_doc.c
  * @brief Static replicas of every firmware screen, for documentation shots.
  *
- * The simulator normally only renders the shared dashboard (dashboard_ui.c).
+ * The simulator normally only renders the shared dashboard (dashboard_carbon.c).
  * The remaining pages live in can_hmi.c and are inseparable from CAN/BLE, so
  * for GUI documentation this file re-creates their exact visuals — same
  * dimensions, colors and fonts, populated with representative static data.
@@ -73,7 +73,7 @@ static dashboard_model_t base_model(void)
 {
     dashboard_model_t m = {0};
     m.soc_percent       = 76.0f;
-    m.battery_current_a = -8.4f;         /* charging */
+    m.battery_current_a = 8.4f;          /* charging (positive = into the battery) */
     m.soc_time_min      = 134;
     m.battery_voltage_v = 52.4f;
     m.inverter_state = 5;  m.dc_output_state = 5;
@@ -105,7 +105,7 @@ static void screen_dash_bms(void)
     dashboard_model_t m = {0};
     m.is_bms            = true;
     m.soc_percent       = 63.0f;
-    m.battery_current_a = 12.5f;         /* discharging */
+    m.battery_current_a = -12.5f;        /* discharging */
     m.soc_time_min      = 210;
     m.battery_voltage_v = 51.8f;
     m.dc_output_state   = 5;

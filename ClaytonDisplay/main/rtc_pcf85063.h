@@ -30,9 +30,12 @@ bool rtc_pcf85063_get_time(struct tm *out);
 /** Write the RTC (also clears the lost-integrity flag). */
 esp_err_t rtc_pcf85063_set_time(const struct tm *t);
 
+/** Days in a month (1-12) of a Gregorian year; 0 for an invalid month. */
+int rtc_days_in_month(int year, int month);
+
 /**
- * Set RTC AND system clock from broken-down local time.
- * Convenience used by the debug-port TS command.
+ * Set RTC AND system clock from broken-down local time. Rejects impossible
+ * dates (e.g. 31 Feb) with ESP_ERR_INVALID_ARG.
  */
 esp_err_t rtc_pcf85063_set_datetime(int year, int month, int day,
                                     int hour, int min, int sec);

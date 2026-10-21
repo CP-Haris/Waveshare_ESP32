@@ -132,11 +132,20 @@ esp_err_t rtc_pcf85063_set_time(const struct tm *t)
     return i2c_master_transmit(s_dev, buf, sizeof(buf), I2C_TIMEOUT_MS);
 }
 
+int rtc_days_in_month(int year, int month)
+{
+    static const uint8_t days[12] = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+    if (month < 1 || month > 12) return 0;
+    if (month == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) return 29;
+    return days[month - 1];
+}
+
 esp_err_t rtc_pcf85063_set_datetime(int year, int month, int day,
                                     int hour, int min, int sec)
 {
     if (year < 2000 || year > 2099 || month < 1 || month > 12 ||
-        day < 1 || day > 31 || hour > 23 || min > 59 || sec > 59) {
+        day < 1 || day > rtc_days_in_month(year, month) ||
+        hour > 23 || min > 59 || sec > 59) {
         return ESP_ERR_INVALID_ARG;
     }
 

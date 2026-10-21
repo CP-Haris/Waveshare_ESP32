@@ -1,0 +1,3 @@
+Use GLCD Font Creator
+
+More steps to be added when I feel like it

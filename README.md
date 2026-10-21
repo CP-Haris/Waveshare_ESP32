@@ -10,6 +10,14 @@ Workspace for the Clayton Power ESP32-S3 CAN HMI firmware and the companion Reac
 | ClaytonPowerApp | `ClaytonPowerApp/` | Expo/React Native app for BLE connection, dashboard, settings, error overview, and CAN bootloader firmware update. |
 | Docs | `Docs/` and `ClaytonPowerApp/docs/` | System overview, firmware notes, mobile app architecture, CAN gateway, and bootloader details. |
 
+## Reference Material (read-only)
+
+| Folder | Purpose |
+| --- | --- |
+| `LPS2 Display Firmware/` | Firmware of the display MCU inside an LPS2; source of truth for the LPS2 BLE protocol (`Docs/LPS2-BLE-Protocol.md`). |
+
+See `CLAUDE.md` for the full project map and the two BLE paths (via ClaytonDisplay, or LPS2 built-in BLE).
+
 ## Quick Commands
 
 ### ESP32 Firmware

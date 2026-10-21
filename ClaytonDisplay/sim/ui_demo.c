@@ -32,6 +32,7 @@ static void demo_tick(lv_timer_t *t)
     float curr  = 12.5f * sinf(phase * 0.5f);             /* +/- charge */
 
     dashboard_model_t m = {0};
+    m.now_ms = lv_tick_get();
     m.is_bms            = false;
     m.soc_percent       = soc;
     m.battery_current_a = curr;

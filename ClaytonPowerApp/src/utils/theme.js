@@ -1,38 +1,56 @@
+// Carbon Blue tokens — see Docs/Carbon Blue App-spec.md §2-3.
+// Values are shared 1:1 with the display firmware (dashboard_carbon.c CB_*):
+// near-black ground, grey plates for everything you can press.
+
 export const colors = {
-  bg: '#0d0d0d',
-  bgElevated: '#1c1c1e',
-  bgCard: '#1a1a1a',
-  bgInset: '#2a2a2a',
-  bgOverlay: 'rgba(0,0,0,0.5)',
+  bg: '#0B0C0E',
+  panel: '#26292E',
+  panelPressed: '#34383F',
+  sheet: '#1A1C20',
+  line: '#26282C',
+  rowLine: '#1A1C20',
+  edge: '#3E434A',
+  track: '#1F2125',
 
-  accent: '#4b8eff',
-  accentDim: '#1a5cc4',
+  ink: '#EFEDE8',
+  soft: '#B9BCB6',
+  dim: '#82868C',
+  faint: '#4A4E54',
 
-  green: '#4ae183',
-  greenBg: '#1a2a1a',
-  greenBorder: '#2a3a2a',
-  greenDeep: '#0d1a0d',
+  blue: '#4E9EEB',
+  onBlue: '#0E1A28',
+  yellow: '#E6C84A',
+  red: '#E25454',
 
-  orange: '#ef6719',
-  solar: '#ffb84a',
-  solarWarm: '#ffb347',
+  scrim: 'rgba(5,6,8,0.62)',
+};
 
-  red: '#ff453a',
-  redSoft: '#ff6b6b',
-  redBg: '#3a1515',
-  redDeep: '#2a1518',
+export const font = {
+  semibold: 'Barlow-SemiBold',
+  bold: 'Barlow-Bold',
+};
 
-  text: '#ffffff',
-  textLight: '#ccc',
-  textDim: '#aaaaaa',
-  textMuted: '#888',
-  textFaint: '#666',
-  textGhost: '#555',
+export const fontAssets = {
+  [font.semibold]: require('../../assets/fonts/BarlowSemiCondensed-SemiBold.ttf'),
+  [font.bold]: require('../../assets/fonts/BarlowSemiCondensed-Bold.ttf'),
+};
 
-  border: '#2e2e2e',
-  borderSubtle: '#2a2a2a',
-  borderInput: '#3a3a3a',
-  borderStrong: '#444',
+const num = { fontVariant: ['tabular-nums'] };
+
+// Typography presets (spec §3). Custom fonts carry their own weight, so no
+// fontWeight is set — Android would otherwise fall back to the system font.
+export const type = {
+  soc: { fontFamily: font.bold, fontSize: 84, lineHeight: 84, color: colors.ink, ...num },
+  total: { fontFamily: font.bold, fontSize: 42, lineHeight: 44, color: colors.ink, ...num },
+  value: { fontFamily: font.bold, fontSize: 22, lineHeight: 26, color: colors.ink, ...num },
+  title: { fontFamily: font.bold, fontSize: 20, letterSpacing: 4, color: colors.ink },
+  zone: { fontFamily: font.bold, fontSize: 15, letterSpacing: 3, color: colors.ink },
+  section: { fontFamily: font.bold, fontSize: 13, letterSpacing: 2, color: colors.dim },
+  label: { fontFamily: font.semibold, fontSize: 18, color: colors.ink },
+  body: { fontFamily: font.semibold, fontSize: 15, lineHeight: 21, color: colors.soft },
+  small: { fontFamily: font.semibold, fontSize: 13, color: colors.dim, ...num },
+  micro: { fontFamily: font.semibold, fontSize: 11, letterSpacing: 1, color: colors.faint, ...num },
+  button: { fontFamily: font.bold, fontSize: 15, letterSpacing: 2, color: colors.ink },
 };
 
 export const spacing = {
@@ -41,22 +59,4 @@ export const spacing = {
   md: 16,
   lg: 24,
   xl: 32,
-};
-
-export const fontSize = {
-  xs: 10,
-  sm: 12,
-  md: 14,
-  lg: 18,
-  xl: 24,
-  xxl: 36,
-  hero: 48,
-};
-
-export const radius = {
-  sm: 6,
-  md: 10,
-  lg: 14,
-  xl: 18,
-  full: 999,
 };

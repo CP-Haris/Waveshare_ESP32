@@ -14,6 +14,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #define CONFIG_TWAI_SUPPRESS_DEPRECATE_WARN 1
 #include "driver/twai.h"
 #include "esp_timer.h"
@@ -71,7 +72,7 @@ static void graph_win_save(void)
 
 #define BOOT_TX_VERBOSE_PACKET_LIMIT 3
 #define BOOT_TX_PROGRESS_INTERVAL 100
-static bool ble_can_passthrough_enabled = false;
+static volatile bool ble_can_passthrough_enabled = false;   // set from the NimBLE task
 static volatile bool pwr_force_wake_request = false;
 static uint32_t boot_tx_packet_no = 0;
 static uint32_t boot_tx_chunk_count = 0;
@@ -241,10 +242,18 @@ static bool    can_target_valid = false;
 #define FLOAT_TO_Q16(f) ((int32_t)((f) * 65536.0f))
 
 // ---------------------------------------------------------------------------
-//  Buzzer stubs (no buzzer on ESP32-S3-Touch-LCD-5)
+//  Buzzer (CP board only — the port layer makes these no-ops on Waveshare)
 // ---------------------------------------------------------------------------
-static void buzzer_click(void)        { }
-static void buzzer_alarm(void)        { }
+static void buzzer_click(void)        { waveshare_buzzer_click(); }
+
+/* Alarm by failure level (FL_* values below); each level has its own
+ * melody so it can be told apart without looking. */
+static void buzzer_alarm(uint8_t level)
+{
+    if (level >= 4)      waveshare_buzzer_alarm(BUZZ_CRITICAL);
+    else if (level >= 2) waveshare_buzzer_alarm(BUZZ_FAILURE);
+    else                 waveshare_buzzer_alarm(BUZZ_WARNING);
+}
 
 // ---------------------------------------------------------------------------
 //  TWAI bus lifecycle
@@ -262,7 +271,17 @@ static void buzzer_alarm(void)        { }
 // ---------------------------------------------------------------------------
 static bool twai_installed = false;
 
-esp_err_t can_hmi_bus_start(void)
+// Serialises install/uninstall against transmits from the BLE and USB tasks,
+// which would otherwise hit a driver being torn down for standby.
+static SemaphoreHandle_t twai_lock(void)
+{
+    static StaticSemaphore_t buf;
+    static SemaphoreHandle_t mtx;
+    if (!mtx) mtx = xSemaphoreCreateMutexStatic(&buf);   // first call: app_main
+    return mtx;
+}
+
+static esp_err_t bus_start_locked(void)
 {
     if (twai_installed) return ESP_OK;
 
@@ -290,74 +309,60 @@ esp_err_t can_hmi_bus_start(void)
         twai_driver_uninstall();
         return err;
     }
+    // CP board: the transceiver's S pin is pulled high (standby) at power-on
+    // and must be driven low via the IO expander — no-op on Waveshare.
+    waveshare_can_transceiver_enable(true);
     twai_installed = true;
     return ESP_OK;
+}
+
+esp_err_t can_hmi_bus_start(void)
+{
+    xSemaphoreTake(twai_lock(), portMAX_DELAY);
+    esp_err_t err = bus_start_locked();
+    xSemaphoreGive(twai_lock());
+    return err;
 }
 
 // Full teardown — this is what actually releases the APB_FREQ_MAX lock.
 static void can_bus_stop(void)
 {
-    if (!twai_installed) return;
-    twai_installed = false;
-    twai_stop();
-    twai_driver_uninstall();
-}
-
-// CANRX (IO16) as a light-sleep wake source. A dominant bit pulls the line low,
-// which wakes the CPU so it can open a listening window. This only wakes the
-// CPU — whether the DISPLAY turns on is decided by lps_wants_wake().
-static void can_wake_source_enable(bool enable)
-{
-    const gpio_num_t rx = (gpio_num_t)CONFIG_EXAMPLE_RX_GPIO_NUM;
-
-#if !PWR_CAN_GPIO_WAKE
-    (void)rx;
-    (void)enable;
-    return;
-#else
-    if (enable) {
-        gpio_config_t cfg = {
-            .pin_bit_mask = (1ULL << CONFIG_EXAMPLE_RX_GPIO_NUM),
-            .mode         = GPIO_MODE_INPUT,
-            .pull_up_en   = GPIO_PULLUP_ENABLE,   // idle bus is recessive = high
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type    = GPIO_INTR_DISABLE,
-        };
-        gpio_config(&cfg);
-        // Keep the pin live while asleep; CONFIG_PM_SLP_DISABLE_GPIO would
-        // otherwise isolate it and the wake would never fire.
-        gpio_sleep_sel_dis(rx);
-        gpio_wakeup_enable(rx, GPIO_INTR_LOW_LEVEL);
-        esp_sleep_enable_gpio_wakeup();
-    } else {
-        gpio_wakeup_disable(rx);
-        gpio_sleep_sel_en(rx);
+    xSemaphoreTake(twai_lock(), portMAX_DELAY);
+    if (twai_installed) {
+        twai_installed = false;
+        twai_stop();
+        twai_driver_uninstall();
+        // Transceiver to standby (low power; RXD still signals bus wake-up)
+        waveshare_can_transceiver_enable(false);
     }
-#endif /* PWR_CAN_GPIO_WAKE */
+    xSemaphoreGive(twai_lock());
 }
+
 
 // ---------------------------------------------------------------------------
 //  CAN Send / Receive for Settings (CAN_Extra via 0x19EF)
 // ---------------------------------------------------------------------------
 static void can_send_raw(uint32_t can_id, const uint8_t *data, uint8_t len)
 {
-    if (!twai_installed) {
-        // Bus is torn down for standby; the caller will retry once the HMI
-        // task has brought it back up (BLE connect / wake).
-        ESP_LOGD(TAG, "[CAN] TX dropped, bus asleep (id=0x%08lX)",
-                 (unsigned long)can_id);
-        return;
-    }
-
     twai_message_t msg = {0};
-    msg.identifier = can_id;
+    msg.identifier = can_id & TWAI_EXTD_ID_MASK;
     msg.extd = 1;              // J1939 uses 29-bit extended IDs
     msg.data_length_code = len > 8 ? 8 : len;
     if (data && msg.data_length_code > 0) {
         memcpy(msg.data, data, msg.data_length_code);
     }
 
+    xSemaphoreTake(twai_lock(), portMAX_DELAY);
+    if (!twai_installed) {
+        xSemaphoreGive(twai_lock());
+        // Bus is torn down for standby; the caller will retry once the HMI
+        // task has brought it back up (BLE connect / wake).
+        ESP_LOGD(TAG, "[CAN] TX dropped, bus asleep (id=0x%08lX)",
+                 (unsigned long)can_id);
+        return;
+    }
     esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(10));
+    xSemaphoreGive(twai_lock());
     boot_tx_diag_update(can_id, msg.data, msg.data_length_code, err);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "[CAN] TX failed id=0x%08lX dlc=%u err=%s",
@@ -437,6 +442,7 @@ typedef enum {
 static const char *enum_solar_op[]  = {"Off", "Auto", "On"};
 static const char *enum_op_volt[]   = {"Auto", "12V", "24V"};
 static const char *enum_config[]    = {"None", "Extension"};
+static const char *enum_off_on[]    = {"Off", "On"};
 
 typedef struct {
     const char *label;
@@ -505,7 +511,7 @@ static setting_t settings_dc_in[] = {
 
 // --- Starter Battery (Block 31) ---
 static setting_t settings_starter[] = {
-    {"Enable",              31, 0, PREFIX_ENUM,       0, "",   65536,  0, 0, 65536,  false,true,true, NULL,0},
+    {"Enable",              31, 0, PREFIX_ENUM,       0, "",   65536,  0, 0, 65536,  false,true,true, enum_off_on,2},
     {"Charge Current",      31, 1, PREFIX_CURRENT,    0, "A",  65536,  0, 0, 2621440, false,true,true, NULL,0},
     {"Charge Voltage",      31, 2, PREFIX_VOLTAGE,    2, "V",  6553,   0, 655360, 983040, false,true,true, NULL,0},
     {"Cut-Off Current",     31, 3, PREFIX_CURRENT,    0, "A",  65536,  0, 0, 2621440, false,true,true, NULL,0},
@@ -705,6 +711,27 @@ static void reset_request_queue(void) {
     req_queue_head  = 0;
 }
 
+// A new screen of requests (a settings category was opened): drop what is
+// still queued and stop retrying requests that belonged to the old screen.
+static void start_request_batch(void) {
+    reset_request_queue();
+    memset(req_pending, 0, sizeof(req_pending));
+}
+
+// Send the next queued CAN_Extra request (spaced by REQ_SPACING_MS) and retry
+// requests that got no answer. Called from the HMI task under the LVGL lock.
+static void service_request_queue(void) {
+    uint32_t now = now_ms();
+    if (req_queue_head < req_queue_count && (now - req_queue_last_ms >= REQ_SPACING_MS)) {
+        can_req_t *r = &req_queue[req_queue_head];
+        can_send_command(r->cmd, r->block, r->id, r->value);
+        pending_track_sent(r->cmd, r->block, r->id, r->value);
+        req_queue_head++;
+        req_queue_last_ms = now;
+    }
+    process_pending_timeouts();
+}
+
 // ---------------------------------------------------------------------------
 //  Decoded system data from CAN broadcasts
 // ---------------------------------------------------------------------------
@@ -723,8 +750,6 @@ typedef struct {
 
     int8_t  operating_state;
     uint8_t failure_level;
-    uint8_t cell_count;
-    uint8_t temp_sensor_count;
 
     int8_t  inverter_state;
     uint8_t inverter_failure;
@@ -788,10 +813,9 @@ typedef struct {
     device_type_t device_type;
     char          part_number[16];
     char          serial_str[32];
-    char          part_desc[32];
     uint8_t       sw_ver[3];
     uint8_t       hw_ver[2];
-    uint8_t       id_msg_mask;
+    uint16_t      id_msg_mask;   // bit n = identification PGN 0x0n received
     bool          id_complete;
     uint32_t      id_request_time;
     lps_data_t    data;
@@ -817,8 +841,15 @@ static int unit_first_online(void)
     return -1;
 }
 
+static void on_selected_unit_changed(void);
+
+// Change the selected unit. Everything that depends on the selection (menu,
+// error flags, settings cache, gauge limits) follows in
+// on_selected_unit_changed(), whoever made the change: the device buttons,
+// failover when a unit goes offline, or the first unit being discovered.
 static void select_unit(int idx)
 {
+    int previous = selected_unit;
     if (unit_is_online_idx(idx)) {
         selected_unit = idx;
         lps_ptr_ = &unit_table[idx].data;
@@ -829,6 +860,7 @@ static void select_unit(int idx)
         lps_ptr_ = &lps_empty_;
         can_target_valid = false;
     }
+    if (selected_unit != previous) on_selected_unit_changed();
 }
 
 static int unit_find_by_addr(uint8_t addr)
@@ -855,9 +887,6 @@ static int unit_add(uint8_t addr)
             unit_table[i].id_request_time = now_ms();
             ESP_LOGI(TAG, "Discovered unit #%d at addr 0x%02X", i, addr);
             can_request_id(addr);
-            // Fetch the bar full-scale limits (dial max + overload threshold)
-            can_get_max(60, 2);   // AC input: Max Current
-            can_get_max(30, 7);   // DC input: Charge Current
             if (selected_unit < 0)
                 select_unit(i);
             return i;
@@ -1096,7 +1125,7 @@ static void decode_identification(int unit_idx, uint8_t pgn_byte, uint8_t *data,
 {
     if (len < 8) return;
     unit_entry_t *u = &unit_table[unit_idx];
-    u->id_msg_mask |= (1 << pgn_byte);
+    if (pgn_byte < 16) u->id_msg_mask |= (uint16_t)(1u << pgn_byte);
 
     switch (pgn_byte) {
     case 0x00:
@@ -1117,27 +1146,25 @@ static void decode_identification(int unit_idx, uint8_t pgn_byte, uint8_t *data,
     case 0x04:
         memcpy(&u->part_number[8], data, 7);
         u->part_number[15] = '\0';
-        if (!u->id_complete) {
-            u->id_complete = true;
-            for (int i = 14; i >= 0; i--) {
-                if (u->part_number[i] == ' ' || u->part_number[i] == '\0')
-                    u->part_number[i] = '\0';
-                else break;
-            }
-            classify_device_type(unit_idx);
-            ESP_LOGI(TAG, "Unit #%d identified: PN=%s SN=%s SW=%d.%d.%d HW=%d.%d",
-                     unit_idx, u->part_number, u->serial_str,
-                     u->sw_ver[0], u->sw_ver[1], u->sw_ver[2],
-                     u->hw_ver[0], u->hw_ver[1]);
+        break;
+    }
+
+    // Classify only once BOTH halves of the part number are in. A lost 0x03
+    // would otherwise leave the unit half-named and DEV_UNKNOWN for good,
+    // because the identification retry stops once id_complete is set.
+    const uint16_t pn_frames = (1u << 0x03) | (1u << 0x04);
+    if (!u->id_complete && (u->id_msg_mask & pn_frames) == pn_frames) {
+        u->id_complete = true;
+        for (int i = 14; i >= 0; i--) {
+            if (u->part_number[i] == ' ' || u->part_number[i] == '\0')
+                u->part_number[i] = '\0';
+            else break;
         }
-        break;
-    case 0x05: memcpy(&u->part_desc[0], data, 8); break;
-    case 0x06: memcpy(&u->part_desc[8], data, 8); break;
-    case 0x07: memcpy(&u->part_desc[16], data, 8); break;
-    case 0x08:
-        memcpy(&u->part_desc[24], data, 7);
-        u->part_desc[31] = '\0';
-        break;
+        classify_device_type(unit_idx);
+        ESP_LOGI(TAG, "Unit #%d identified: PN=%s SN=%s SW=%d.%d.%d HW=%d.%d",
+                 unit_idx, u->part_number, u->serial_str,
+                 u->sw_ver[0], u->sw_ver[1], u->sw_ver[2],
+                 u->hw_ver[0], u->hw_ver[1]);
     }
 }
 
@@ -1168,8 +1195,20 @@ static void decode_failure_codes(lps_data_t *d, const uint8_t *data)
             if (d->failure_codes[j] == oc) { still_in_buf = true; break; }
         if (!still_in_buf) { error_flags[oc].active = 0; error_flags[oc].minimized = 0; }
     }
-    for (int i = 0; i < 8; i++)
-        if (d->failure_codes[i] != 0) error_flags[d->failure_codes[i]].active = 1;
+    /* Sound once per NEWLY appearing code (incl. POP_HIDE warnings such as
+     * overloads), at the level of the most severe new code. */
+    int alarm_level = -1;
+    for (int i = 0; i < 8; i++) {
+        uint8_t c = d->failure_codes[i];
+        if (c == 0) continue;
+        if (!error_flags[c].active) {
+            const error_def_t *def = lookup_error(c);
+            int lvl = def ? def->level : FL_SIMPLE_FAILURE;
+            if (lvl > alarm_level) alarm_level = lvl;
+        }
+        error_flags[c].active = 1;
+    }
+    if (alarm_level >= FL_WARNING) buzzer_alarm((uint8_t)alarm_level);
 }
 
 static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint8_t len)
@@ -1194,8 +1233,6 @@ static void decode_broadcast(lps_data_t *d, uint32_t can_id, uint8_t *data, uint
         case 0x03:
             d->operating_state = (int8_t)data[0];
             d->failure_level = data[1];
-            d->cell_count = data[6];
-            d->temp_sensor_count = data[7];
             break;
         case 0x04:
             d->inverter_state = (int8_t)data[0];
@@ -1283,11 +1320,11 @@ static void decode_broadcast_bms(lps_data_t *d, uint32_t can_id, uint8_t *data, 
             d->pos_term_temp = BYTES_TO_SINT16(data[2], data[3]) / 256.0f;
             break;
         case 0x10:
-            d->battery_voltage_v = 0;
-            for (int i = 0; i < 4; i++) {
+            // Pack voltage comes from 0x02 (measured); summing the first four
+            // cells here would overwrite it with a wrong value on packs with
+            // more than four cells.
+            for (int i = 0; i < 4; i++)
                 d->cell_voltage[i] = BYTES_TO_UINT16(data[i*2], data[i*2+1]) / 8192.0f;
-                d->battery_voltage_v += d->cell_voltage[i];
-            }
             break;
         }
     }
@@ -1299,10 +1336,11 @@ static void decode_can_extra(uint8_t *data, uint8_t len)
     uint8_t cmd   = data[1];
     uint8_t block = data[2];
     uint8_t id    = data[3];
-    int32_t value = (int32_t)data[4]
-                  | ((int32_t)data[5] << 8)
-                  | ((int32_t)data[6] << 16)
-                  | ((int32_t)data[7] << 24);
+    // Assemble unsigned: shifting a byte >= 0x80 into bit 31 of an int32 is UB.
+    int32_t value = (int32_t)((uint32_t)data[4]
+                            | ((uint32_t)data[5] << 8)
+                            | ((uint32_t)data[6] << 16)
+                            | ((uint32_t)data[7] << 24));
 
     if (cmd == CAN_CMD_GET_VAL || cmd == CAN_CMD_GET_MIN || cmd == CAN_CMD_GET_MAX) {
         pending_mark_response(cmd, block, id);
@@ -1342,6 +1380,9 @@ static void decode_can_message(uint32_t can_id, uint8_t *data, uint8_t len)
     uint8_t src_addr = can_id & 0xFF;
     uint16_t upper = (can_id >> 16) & 0xFFFF;
 
+    // Our own address and the global address are never a unit.
+    if (src_addr == CAN_DISPLAY_ADDR || src_addr == 0xFF) return;
+
     if (upper == 0x19EF || upper == 0x15EF) {
         if (selected_unit >= 0 && unit_table[selected_unit].can_addr == src_addr)
             decode_can_extra(data, len);
@@ -1367,6 +1408,10 @@ static void decode_can_message(uint32_t can_id, uint8_t *data, uint8_t len)
         }
         return;
     }
+
+    // Only Clayton Power broadcasts create a unit; any other node on the bus
+    // (e.g. an 11-bit frame or a foreign J1939 PGN) must not fill the list.
+    if (upper != 0x18FF && upper != 0x14FF) return;
 
     int idx = unit_add(src_addr);
     if (idx >= 0) {
@@ -1405,7 +1450,7 @@ static lv_obj_t *page_detail;
 static lv_obj_t *page_errors;
 static device_type_t grid_built_for = DEV_UNKNOWN;
 
-// Dashboard widgets are owned by the shared dashboard_ui module (dashboard_ui.c)
+// Dashboard widgets are owned by the dashboard module (dashboard_carbon.c)
 // so the layout is identical between firmware and the PC simulator.
 
 // Error page
@@ -1431,6 +1476,17 @@ static lv_obj_t *ble_pin_label;
 static volatile bool ble_pairing_popup_requested = false;
 static volatile uint32_t ble_pairing_popup_passkey = 0;
 
+// Time from the app (BLE_CMD_SYNC_TIME). Received on the BLE thread, applied
+// in the main loop so the RTC's I2C access stays out of the BLE callback.
+typedef struct {
+    int year, month, day, hour, min, sec;
+    bool force;
+    uint32_t rx_ms;     // when it arrived — applying it later adds the delay
+} ble_time_sync_t;
+static ble_time_sync_t ble_time_sync;
+static volatile bool ble_time_sync_requested = false;
+static portMUX_TYPE ble_time_sync_lock = portMUX_INITIALIZER_UNLOCKED;
+
 // Settings detail
 static lv_obj_t *detail_content;
 static int detail_cat_idx = -1;
@@ -1442,6 +1498,11 @@ static int info_row_count = 0;
 // Setting editor popup
 static lv_obj_t *editor_overlay;
 static setting_t *editor_setting;
+// The value being edited. It follows the unit's value until the user presses
+// +/-, and is only written back (as a SET) on OK — so a GET answer arriving
+// mid-edit cannot overwrite the user's choice, and Cancel leaves no trace.
+static int32_t editor_draft;
+static bool    editor_touched;
 static lv_obj_t *editor_lbl_name;
 static lv_obj_t *editor_lbl_value;
 static lv_obj_t *editor_lbl_range;
@@ -1452,6 +1513,16 @@ static lv_obj_t *clock_rollers[5];
 static lv_obj_t *clock_row_val;      // value label on the "Set Clock" row
 #define CLOCK_YEAR_MIN 2024
 #define CLOCK_YEAR_MAX 2040
+
+// The RTC counts as unset (first power-up, battery lost) until it holds a
+// date from CLOCK_YEAR_MIN on — the header shows --:-- and the app may set it.
+static bool clock_is_set(void)
+{
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    return lt.tm_year + 1900 >= CLOCK_YEAR_MIN;
+}
 
 // ---------------------------------------------------------------------------
 //  Helper Functions
@@ -1485,8 +1556,9 @@ static void format_setting_value(char *buf, size_t buflen, setting_t *s, int32_t
     switch (s->prefix) {
     case PREFIX_VOLTAGE:
         snprintf(buf, buflen, "%.*f V", s->decimals, (double)fval); break;
-    case PREFIX_CURRENT:
-        snprintf(buf, buflen, "%.*f A", s->decimals, (double)fval); break;
+    case PREFIX_CURRENT:   /* "A", or the table's own unit (e.g. "Ah") */
+        snprintf(buf, buflen, "%.*f %s", s->decimals, (double)fval,
+                 (s->unit && s->unit[0]) ? s->unit : "A"); break;
     case PREFIX_POWER:
         snprintf(buf, buflen, "%.0f W", (double)fval); break;
     case PREFIX_PROCENT:
@@ -1675,19 +1747,25 @@ static void format_info_value(char *buf, size_t sz, int cat_idx, int row)
 // ---------------------------------------------------------------------------
 //  Settings editor popup
 // ---------------------------------------------------------------------------
+static void label_set_if_changed(lv_obj_t *label, const char *text)
+{
+    if (strcmp(lv_label_get_text(label), text) != 0) lv_label_set_text(label, text);
+}
+
 static void editor_update_display(void)
 {
     if (!editor_setting) return;
+    if (!editor_touched) editor_draft = editor_setting->current_val;
     char buf[80];
-    format_setting_value(buf, sizeof(buf), editor_setting, editor_setting->current_val);
-    lv_label_set_text(editor_lbl_value, buf);
+    format_setting_value(buf, sizeof(buf), editor_setting, editor_draft);
+    label_set_if_changed(editor_lbl_value, buf);
 
     if (editor_setting->min_received && editor_setting->max_received) {
         char bmin[32], bmax[32];
         format_setting_value(bmin, sizeof(bmin), editor_setting, editor_setting->min_val);
         format_setting_value(bmax, sizeof(bmax), editor_setting, editor_setting->max_val);
         snprintf(buf, sizeof(buf), "%s .. %s", bmin, bmax);
-        lv_label_set_text(editor_lbl_range, buf);
+        label_set_if_changed(editor_lbl_range, buf);
     }
 }
 
@@ -1699,26 +1777,30 @@ static void editor_btn_cb(lv_event_t *e)
     if (!editor_setting) return;
 
     if (strcmp(txt, LV_SYMBOL_CLOSE) == 0) {
-        can_get_value(editor_setting->block, editor_setting->id);
         lv_obj_add_flag(editor_overlay, LV_OBJ_FLAG_HIDDEN);
         editor_setting = NULL;
         return;
     }
     if (strcmp(txt, LV_SYMBOL_OK) == 0) {
-        can_set_value(editor_setting->block, editor_setting->id, editor_setting->current_val);
+        if (editor_touched) {
+            editor_setting->current_val = editor_draft;   // shown until the unit confirms
+            can_set_value(editor_setting->block, editor_setting->id, editor_draft);
+        }
         lv_obj_add_flag(editor_overlay, LV_OBJ_FLAG_HIDDEN);
         editor_setting = NULL;
         return;
     }
 
     if (strcmp(txt, LV_SYMBOL_PLUS) == 0) {
-        int32_t nv = editor_setting->current_val + editor_setting->step_slow;
+        int32_t nv = editor_draft + editor_setting->step_slow;
         if (editor_setting->max_received && nv > editor_setting->max_val) nv = editor_setting->max_val;
-        editor_setting->current_val = nv;
+        editor_draft = nv;
+        editor_touched = true;
     } else if (strcmp(txt, LV_SYMBOL_MINUS) == 0) {
-        int32_t nv = editor_setting->current_val - editor_setting->step_slow;
+        int32_t nv = editor_draft - editor_setting->step_slow;
         if (editor_setting->min_received && nv < editor_setting->min_val) nv = editor_setting->min_val;
-        editor_setting->current_val = nv;
+        editor_draft = nv;
+        editor_touched = true;
     }
     editor_update_display();
 }
@@ -1792,6 +1874,7 @@ static void create_editor_overlay(lv_obj_t *parent)
 static void open_editor(setting_t *s)
 {
     editor_setting = s;
+    editor_touched = false;
     lv_label_set_text(editor_lbl_name, s->label);
     editor_update_display();
     lv_obj_clear_flag(editor_overlay, LV_OBJ_FLAG_HIDDEN);
@@ -1811,7 +1894,10 @@ static void clock_ok_cb(lv_event_t *e)
     int d  = 1 + (int)lv_roller_get_selected(clock_rollers[2]);
     int h  = (int)lv_roller_get_selected(clock_rollers[3]);
     int mi = (int)lv_roller_get_selected(clock_rollers[4]);
-    rtc_pcf85063_set_datetime(y, mo, d, h, mi, 0);
+    int dim = rtc_days_in_month(y, mo);
+    if (d > dim) d = dim;                       // 31 Feb -> 28/29 Feb
+    esp_err_t err = rtc_pcf85063_set_datetime(y, mo, d, h, mi, 0);
+    if (err != ESP_OK) ESP_LOGW(TAG, "Set clock failed: %s", esp_err_to_name(err));
     lv_obj_add_flag(clock_overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -2204,7 +2290,7 @@ static void populate_detail(int cat_idx)
     }
 
     // Setting rows
-    reset_request_queue();
+    start_request_batch();
     for (int s = 0; s < cat->count; s++)
         queue_get_value(cat->settings[s].block, cat->settings[s].id);
 
@@ -2305,7 +2391,7 @@ static void update_settings_detail(void)
         if (!info_val_labels[i]) continue;
         char vbuf[32];
         format_info_value(vbuf, sizeof(vbuf), detail_cat_idx, i);
-        lv_label_set_text(info_val_labels[i], vbuf);
+        label_set_if_changed(info_val_labels[i], vbuf);
     }
     for (int s = 0; s < cat->count && s < MAX_ITEMS_PER_CAT; s++) {
         if (!detail_val_labels[s]) continue;
@@ -2313,7 +2399,7 @@ static void update_settings_detail(void)
         if (st->val_received) {
             char vbuf[32];
             format_setting_value(vbuf, sizeof(vbuf), st, st->current_val);
-            lv_label_set_text(detail_val_labels[s], vbuf);
+            label_set_if_changed(detail_val_labels[s], vbuf);
         }
     }
 
@@ -2329,8 +2415,11 @@ static void update_settings_detail(void)
         } else {
             snprintf(vbuf, sizeof(vbuf), "--:--");
         }
-        lv_label_set_text(clock_row_val, vbuf);
+        label_set_if_changed(clock_row_val, vbuf);
     }
+
+    // An open setting editor shows the unit's answer as soon as it arrives.
+    editor_update_display();
 }
 
 static void create_settings_detail(lv_obj_t *parent)
@@ -2741,22 +2830,32 @@ static void reset_all_settings_received(void)
             menu_categories_bms[c].settings[s].val_received = false;
 }
 
+static volatile bool chart_reset_pending = false;   // set by any task, consumed by update_dashboard()
+
+static void on_selected_unit_changed(void)
+{
+    refresh_error_flags_for_unit();
+    if (selected_unit >= 0) {
+        switch_active_menu(unit_table[selected_unit].device_type);
+        // Gauge full-scale limits come from the selected unit. The tables'
+        // compiled defaults stand in until the GET_MAX responses arrive.
+        can_get_max(60, 2);   // AC input: Max Current
+        can_get_max(30, 7);   // DC input: Charge Current
+    }
+    reset_all_settings_received();
+    chart_reset_pending = true;   // SoC history belongs to the previous unit
+}
+
 static void btn_dev_prev_cb(lv_event_t *e)
 {
     (void)e; buzzer_click();
     select_prev_unit();
-    refresh_error_flags_for_unit();
-    if (selected_unit >= 0) switch_active_menu(unit_table[selected_unit].device_type);
-    reset_all_settings_received();
 }
 
 static void btn_dev_next_cb(lv_event_t *e)
 {
     (void)e; buzzer_click();
     select_next_unit();
-    refresh_error_flags_for_unit();
-    if (selected_unit >= 0) switch_active_menu(unit_table[selected_unit].device_type);
-    reset_all_settings_received();
 }
 
 // Fill the model's device-selector fields (name string, online state). The
@@ -2839,7 +2938,13 @@ static void update_dashboard(void)
     device_type_t dt = DEV_UNKNOWN;
     if (selected_unit >= 0) dt = unit_table[selected_unit].device_type;
 
+    if (chart_reset_pending) {
+        chart_reset_pending = false;
+        dashboard_ui_reset_history();
+    }
+
     dashboard_model_t m = {0};
+    m.now_ms = now;
     fill_dev_selector(&m);
 
     m.is_bms            = (dt == DEV_BMS);
@@ -2869,9 +2974,9 @@ static void update_dashboard(void)
     m.error_count    = lps.failure_code_count;
     m.error_critical = (lps.failure_level >= FL_SIMPLE_FAILURE);
 
-    // Bar full-scale from CAN-fetched maxima (GET_MAX responses land in the
-    // settings tables). Current limits are converted to watts; 0 = unknown,
-    // the skin then uses its compiled default.
+    // Bar full-scale from the settings tables: the GET_MAX response of the
+    // selected unit, or the table's compiled default until it arrives.
+    // Current limits are converted to watts.
     if (settings_ac_in[0].max_received)          /* Block 60 id 2: Max Current */
         m.ac_in_max_w = Q16_TO_FLOAT(settings_ac_in[0].max_val) * 230.0f;
     if (settings_dc_in[1].max_received) {        /* Block 30 id 7: Charge Current */
@@ -2907,23 +3012,15 @@ static void update_dashboard(void)
 #define PWR_SLEEP_POLL_MS          250    // touch poll / light-sleep slice
 #define PWR_CAN_WINDOW_MS          150    // TWAI listening window length
 #define PWR_CAN_WINDOW_PERIOD_MS   3000   // how often the bus is sampled
-#define PWR_CAN_WINDOW_MIN_GAP_MS  1000   // rate limit for CANRX-triggered windows
 
-// CANRX (IO16) as a light-sleep wake source only works on a bus that is
-// actually quiet while the display sleeps. It is not: the LPS/BMS units keep
-// broadcasting their (idle) status, so a level-triggered wake fires on every
-// dominant bit and shreds each 250 ms sleep slice into fragments — and every
-// fragment pays the ~2 ms wake overhead (CONFIG_ESP_SLEEP_WAIT_FLASH_READY_
-// EXTRA_DELAY alone is 2000 us). Measured effect: awake ~80% of the time.
-//
-// The periodic window above replaces it. Wake latency for "a unit switched on"
-// becomes PWR_CAN_WINDOW_PERIOD_MS instead of near-instant, which is the price
-// of sleeping between samples.
-#define PWR_CAN_GPIO_WAKE          0
+// Why a periodic window and not CANRX as a GPIO wake source: the LPS/BMS
+// units keep broadcasting while idle, so a level-triggered wake fires on every
+// dominant bit and kept the CPU awake ~80% of the time (measured). The window
+// costs up to PWR_CAN_WINDOW_PERIOD_MS of wake latency instead.
 
 enum {
     PWR_ACTIVE,         // Normal operation — display on
-    PWR_SLEEP_SPLASH,   // Showing "CLAYTON POWER" 2s before sleeping
+    PWR_SLEEP_SPLASH,   // Showing the Clayton Power logo 2s before sleeping
     PWR_SLEEPING,       // Display off, only CAN polling
     PWR_WAKE_SPLASH,    // Waking up — showing splash for 2s
     PWR_DASHBOARD,      // Dashboard shown for 30s after wake
@@ -2940,17 +3037,12 @@ static uint32_t pwr_last_touch_ms   = 0;
 static uint32_t pwr_boot_time_ms    = 0;    // Set once at init
 static uint32_t pwr_idle_since_ms   = 0;    // When idle was first detected
 static bool     pwr_was_idle        = false; // For debounce tracking
-static bool     pwr_skip_grace      = false; // True when waking from deep sleep
 static lv_obj_t *pwr_splash_scr     = NULL;
 static uint32_t last_can_window_ms  = 0;     // Last standby CAN listening window
 
-// Standby instrumentation. sleep_loops counts iterations of the deep-idle
-// branch; can_wake_count how many of those followed a CANRX wake; and
-// can_window_count how many actually brought the bus up. If can_wake_count
-// tracks sleep_loops, the bus is busy enough that the level-triggered wake
-// fires on every sleep attempt and standby current will stay high.
+// Standby instrumentation: iterations of the deep-idle branch, and how many
+// of them opened a CAN listening window.
 static uint32_t sleep_loops        = 0;
-static uint32_t can_wake_count     = 0;
 static uint32_t can_window_count   = 0;
 
 // ---------------------------------------------------------------------------
@@ -2990,15 +3082,15 @@ static void light_sleep_stats_init(void)
 }
 
 // Check if ALL connected units are idle (requires real status data)
+// A silent bus (no unit online) counts as idle: otherwise a touch wake with
+// every unit switched off would keep the display on until the next reset.
 static bool lps_is_idle(void)
 {
-    bool any_connected = false;
     for (int i = 0; i < UNIT_TABLE_SIZE; i++) {
         if (unit_table[i].status != UNIT_ONLINE) continue;
         if (!unit_table[i].data.connected) continue;
         // Require at least some CAN messages before trusting state data
         if (unit_table[i].data.msg_count < 10) return false;
-        any_connected = true;
         lps_data_t *d = &unit_table[i].data;
         if (unit_table[i].device_type == DEV_BMS) {
             uint8_t os = (uint8_t)d->operating_state;
@@ -3009,7 +3101,7 @@ static bool lps_is_idle(void)
                 return false;
         }
     }
-    return any_connected;
+    return true;
 }
 
 // Wake criterion for standby. Deliberately NOT the inverse of lps_is_idle():
@@ -3064,6 +3156,8 @@ static bool touch_is_pressed_direct(void)
     return pressed;
 }
 
+LV_IMG_DECLARE(splash_logo);
+
 static void pwr_show_splash(void)
 {
     if (pwr_splash_scr) return;  // Already showing
@@ -3072,21 +3166,19 @@ static void pwr_show_splash(void)
     pwr_splash_scr = lv_obj_create(scr);
     lv_obj_remove_style_all(pwr_splash_scr);
     lv_obj_set_size(pwr_splash_scr, SCREEN_W, SCREEN_H);
-    lv_obj_set_style_bg_color(pwr_splash_scr, COL_BG_DARK, 0);
+    lv_obj_set_style_bg_color(pwr_splash_scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(pwr_splash_scr, LV_OPA_COVER, 0);
     lv_obj_clear_flag(pwr_splash_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title = lv_label_create(pwr_splash_scr);
-    lv_label_set_text(title, "CLAYTON POWER");
-    lv_obj_set_style_text_color(title, COL_ACCENT, 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
-    lv_obj_align(title, LV_ALIGN_CENTER, 0, -10);
-
-    lv_obj_t *sub = lv_label_create(pwr_splash_scr);
-    lv_label_set_text(sub, "Standby");
-    lv_obj_set_style_text_color(sub, COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
-    lv_obj_align(sub, LV_ALIGN_CENTER, 0, 24);
+    // Logo: A8 alpha image (tools/gen_splash.py), recolored white
+    lv_obj_t *logo = lv_img_create(pwr_splash_scr);
+    lv_img_set_src(logo, &splash_logo);
+    lv_obj_set_style_img_recolor(logo, lv_color_white(), 0);
+    lv_obj_set_style_img_recolor_opa(logo, LV_OPA_COVER, 0);
+#if SCREEN_W != 800
+    lv_img_set_zoom(logo, (uint16_t)(256 * SCREEN_W / 800));   // keep 70 % width
+#endif
+    lv_obj_center(logo);
 
     // NOTE: Do NOT call lv_refr_now() here — it hangs the task
     // due to RGB LCD bounce buffer DMA contention. Let the normal
@@ -3144,12 +3236,10 @@ static void pwr_display_off(void)
 
     // 9) Tear down TWAI completely. twai_stop() alone keeps the driver's
     //    ESP_PM_APB_FREQ_MAX lock, which blocks light sleep outright; only
-    //    twai_driver_uninstall() releases it. CANRX then becomes a plain GPIO
-    //    and is armed as a light-sleep wake source instead.
+    //    twai_driver_uninstall() releases it. The standby loop opens short
+    //    listening windows instead.
     can_bus_stop();
-    can_wake_source_enable(true);
-    ESP_LOGI(TAG, "[PWR] TWAI uninstalled, CANRX (IO%d) armed as wake source",
-             CONFIG_EXAMPLE_RX_GPIO_NUM);
+    ESP_LOGI(TAG, "[PWR] TWAI uninstalled for standby");
 
     // 10) Slow BLE advertising — cuts radio duty ~8x while still discoverable
     ble_gateway_set_standby(true);
@@ -3204,7 +3294,6 @@ static void pwr_display_on(void)
     g_pwr_wake_step = 3;
     usb_modem_standby(false);
     g_pwr_wake_step = 4;
-    can_wake_source_enable(false);
     can_hmi_bus_start();
 
     // 3) Wake CH422G + release LCD_RST + CTP_RST (DISP stays LOW)
@@ -3255,15 +3344,8 @@ static bool pwr_management_tick(void)
     uint32_t now = now_ms();
 
     // Startup grace period — don't do idle detection for first 15s
-    if (pwr_boot_time_ms == 0) {
-        pwr_boot_time_ms = now;
-        if (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_EXT0)) {
-            pwr_skip_grace = true;
-            ESP_LOGI(TAG, "[PWR] Deep sleep wake — skipping grace period");
-        }
-    }
-    if (pwr_state == PWR_ACTIVE && !pwr_skip_grace &&
-        (now - pwr_boot_time_ms) < PWR_STARTUP_GRACE_MS)
+    if (pwr_boot_time_ms == 0) pwr_boot_time_ms = now;
+    if (pwr_state == PWR_ACTIVE && (now - pwr_boot_time_ms) < PWR_STARTUP_GRACE_MS)
         return false;
 
     // Keep the gateway awake while BLE raw CAN passthrough is active or a
@@ -3480,6 +3562,31 @@ static void ble_cmd_handler(uint8_t cmd, const uint8_t *payload, uint16_t len)
         }
         break;
 
+    case BLE_CMD_SYNC_TIME:
+        if (len >= 8) {
+            ble_time_sync_t t = {
+                .year  = payload[0] | (payload[1] << 8),
+                .month = payload[2], .day = payload[3],
+                .hour  = payload[4], .min = payload[5], .sec = payload[6],
+                .force = payload[7] != 0,
+                .rx_ms = now_ms(),
+            };
+            bool valid = t.year >= CLOCK_YEAR_MIN && t.year <= CLOCK_YEAR_MAX &&
+                         t.month >= 1 && t.month <= 12 && t.day >= 1 &&
+                         t.day <= rtc_days_in_month(t.year, t.month) &&
+                         t.hour < 24 && t.min < 60 && t.sec < 60;
+            if (valid) {
+                taskENTER_CRITICAL(&ble_time_sync_lock);
+                ble_time_sync = t;
+                ble_time_sync_requested = true;
+                taskEXIT_CRITICAL(&ble_time_sync_lock);
+            } else {
+                ESP_LOGW(TAG, "[BLE] Ignoring invalid time %d-%d-%d %d:%d:%d",
+                         t.year, t.month, t.day, t.hour, t.min, t.sec);
+            }
+        }
+        break;
+
     default:
         ESP_LOGW(TAG, "[BLE] Unknown cmd 0x%02X", cmd);
         break;
@@ -3533,7 +3640,8 @@ void can_hmi_task(void *arg)
     // heartbeat because the USB log buffer is cleared when a host attaches —
     // one-shot boot logs never reach the PC.
     int boot_rst = (int)esp_reset_reason();
-    uint32_t boot_ws = g_pwr_wake_step;
+    // RTC_NOINIT memory holds garbage after a power-on reset.
+    uint32_t boot_ws = (boot_rst == ESP_RST_POWERON) ? 0 : g_pwr_wake_step;
     g_pwr_wake_step = 0;
 
     uint32_t last_ui_update = 0;
@@ -3583,71 +3691,45 @@ void can_hmi_task(void *arg)
         // Otherwise (deep idle): the TWAI driver stays uninstalled so the
         // power manager is free to enter light sleep during the vTaskDelay()
         // at the bottom of this branch. The bus is only brought up for a short
-        // listening window — either because CANRX woke us, or as a periodic
-        // safety net in case the wake was missed.
+        // listening window every PWR_CAN_WINDOW_PERIOD_MS.
         // =============================================================
         if (pwr_state == PWR_SLEEPING) {
             bool link_active = ble_gateway_is_connected() || usb_modem_host_present();
 
             if (link_active) {
-                can_wake_source_enable(false);
                 can_hmi_bus_start();
                 vTaskDelay(pdMS_TO_TICKS(50));
 
+                lvgl_port_lock(-1);   // HMI state, see the active loop
                 twai_message_t rx_msg;
                 while (twai_receive(&rx_msg, 0) == ESP_OK) {
                     if (!rx_msg.rtr)
                         decode_can_message(rx_msg.identifier, rx_msg.data,
                                            rx_msg.data_length_code);
                 }
-
-                // Process staggered settings CAN requests.
-                if (!raw_passthrough_active) {
-                    uint32_t now_q = now_ms();
-                    if (req_queue_head < req_queue_count &&
-                        (now_q - req_queue_last_ms >= REQ_SPACING_MS)) {
-                        can_req_t *r = &req_queue[req_queue_head];
-                        can_send_command(r->cmd, r->block, r->id, r->value);
-                        pending_track_sent(r->cmd, r->block, r->id, r->value);
-                        req_queue_head++;
-                        req_queue_last_ms = now_q;
-                        if (req_queue_head >= req_queue_count) {
-                            reset_request_queue();
-                        }
-                    }
-                    process_pending_timeouts();
-                }
+                if (!raw_passthrough_active) service_request_queue();
+                lvgl_port_unlock();
             } else {
                 // --- Deep idle: CAN listening window, if due ---------------
-                uint32_t now_w = now_ms();
-                bool woke_on_can =
-                    (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_GPIO)) != 0;
-                bool window_due =
-                    (now_w - last_can_window_ms >= PWR_CAN_WINDOW_PERIOD_MS);
-                bool rate_ok =
-                    (now_w - last_can_window_ms >= PWR_CAN_WINDOW_MIN_GAP_MS);
-
                 sleep_loops++;
-                if (woke_on_can) can_wake_count++;
-
-                if (window_due || (woke_on_can && rate_ok)) {
+                if (now_ms() - last_can_window_ms >= PWR_CAN_WINDOW_PERIOD_MS) {
                     can_window_count++;
-                    can_wake_source_enable(false);
                     if (can_hmi_bus_start() == ESP_OK) {
                         uint32_t t0 = now_ms();
                         do {
                             twai_message_t rx_msg;
+                            lvgl_port_lock(-1);   // HMI state, see the active loop
                             while (twai_receive(&rx_msg, 0) == ESP_OK) {
                                 if (!rx_msg.rtr)
                                     decode_can_message(rx_msg.identifier,
                                                        rx_msg.data,
                                                        rx_msg.data_length_code);
                             }
+                            lvgl_port_unlock();
                             vTaskDelay(pdMS_TO_TICKS(10));
                         } while (now_ms() - t0 < PWR_CAN_WINDOW_MS);
                     }
                     can_bus_stop();
-                    can_wake_source_enable(true);
                     last_can_window_ms = now_ms();
                 }
             }
@@ -3664,16 +3746,15 @@ void can_hmi_task(void *arg)
                 int64_t up_us = esp_timer_get_time();
                 int64_t ls_us = ls_total_us;
                 ESP_LOGI(TAG,
-                         "[HB] alive t=%lu pwr=%d link=%d twai=%d | 10s: loops=%lu canwake=%lu win=%lu"
+                         "[HB] alive t=%lu pwr=%d link=%d twai=%d | 10s: loops=%lu win=%lu"
                          " | lightsleep: n=%lu total=%llds = %lu%% of uptime",
                          (unsigned long)now_hb, pwr_state, link_active,
                          twai_installed, (unsigned long)sleep_loops,
-                         (unsigned long)can_wake_count,
                          (unsigned long)can_window_count,
                          (unsigned long)ls_count,
                          (long long)(ls_us / 1000000),
                          (unsigned long)(up_us > 0 ? (ls_us * 100) / up_us : 0));
-                sleep_loops = can_wake_count = can_window_count = 0;
+                sleep_loops = can_window_count = 0;
                 last_heartbeat = now_hb;
             }
 
@@ -3689,21 +3770,34 @@ void can_hmi_task(void *arg)
         // =============================================================
         // Normal active mode
         // =============================================================
+        // Heartbeat every 10s to prove task is alive. rst/ws = reset reason
+        // and wake-step breadcrumb from the PREVIOUS boot (crash diagnosis).
+        uint32_t now_bo = now_ms();
+        if (now_bo - last_heartbeat >= 10000) {
+            // TWAI health: tec/rec = TX/RX error counters, txq = frames still
+            // waiting (TX that never gets ACKed piles up here).
+            twai_status_info_t st = {0};
+            twai_get_status_info(&st);
+            ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d rst=%d ws=0x%lX | can state=%lu tec=%lu rec=%lu"
+                     " txq=%lu tx_failed=%lu bus_err=%lu",
+                     (unsigned long)now_bo, pwr_state, boot_rst, (unsigned long)boot_ws,
+                     (unsigned long)st.state, (unsigned long)st.tx_error_counter,
+                     (unsigned long)st.rx_error_counter, (unsigned long)st.msgs_to_tx,
+                     (unsigned long)st.tx_failed_count, (unsigned long)st.bus_error_count);
+            last_heartbeat = now_bo;
+        }
+
+        // The unit table, active menu, error flags and request queue are also
+        // changed by LVGL callbacks (device buttons, settings, popups). Those
+        // run under the LVGL mutex, so decoding and queue work take it too.
+        lvgl_port_lock(-1);
+
         // Poll TWAI — drain all available messages
         twai_message_t rx_msg;
         while (twai_receive(&rx_msg, 0) == ESP_OK) {
             if (!rx_msg.rtr) {
                 decode_can_message(rx_msg.identifier, rx_msg.data, rx_msg.data_length_code);
             }
-        }
-
-        // Heartbeat every 10s to prove task is alive. rst/ws = reset reason
-        // and wake-step breadcrumb from the PREVIOUS boot (crash diagnosis).
-        uint32_t now_bo = now_ms();
-        if (now_bo - last_heartbeat >= 10000) {
-            ESP_LOGI(TAG, "[HB] alive t=%lu pwr=%d rst=%d ws=0x%lX",
-                     (unsigned long)now_bo, pwr_state, boot_rst, (unsigned long)boot_ws);
-            last_heartbeat = now_bo;
         }
 
         // Periodic checks every 1s
@@ -3739,18 +3833,9 @@ void can_hmi_task(void *arg)
         }
 
         // Process staggered request queue
-        if (!raw_passthrough_active) {
-            uint32_t now_q = now_ms();
-            if (req_queue_head < req_queue_count &&
-                (now_q - req_queue_last_ms >= REQ_SPACING_MS)) {
-                can_req_t *r = &req_queue[req_queue_head];
-                can_send_command(r->cmd, r->block, r->id, r->value);
-                pending_track_sent(r->cmd, r->block, r->id, r->value);
-                req_queue_head++;
-                req_queue_last_ms = now_q;
-            }
-            process_pending_timeouts();
-        }
+        if (!raw_passthrough_active) service_request_queue();
+
+        lvgl_port_unlock();
 
         // UI update — must hold LVGL mutex
         uint32_t now = now_ms();
@@ -3776,7 +3861,6 @@ void can_hmi_task(void *arg)
                         uint8_t code = get_popup_error_code();
                         if (code != 0) {
                             show_error_popup(code);
-                            buzzer_alarm();
                         }
                     }
 
@@ -3791,6 +3875,34 @@ void can_hmi_task(void *arg)
                 lvgl_port_unlock();
             }
             last_ui_update = now;
+        }
+
+        // ---- Clock sync from the app: only fills in an unset clock ----
+        if (ble_time_sync_requested) {
+            taskENTER_CRITICAL(&ble_time_sync_lock);
+            ble_time_sync_t t = ble_time_sync;
+            ble_time_sync_requested = false;
+            taskEXIT_CRITICAL(&ble_time_sync_lock);
+
+            if (t.force || !clock_is_set()) {
+                // Add the time it waited here (e.g. received just before standby).
+                struct tm tm_in = {
+                    .tm_year = t.year - 1900, .tm_mon = t.month - 1, .tm_mday = t.day,
+                    .tm_hour = t.hour, .tm_min = t.min, .tm_sec = t.sec, .tm_isdst = -1,
+                };
+                time_t unix_t = mktime(&tm_in) + (time_t)((now_ms() - t.rx_ms) / 1000);
+                struct tm lt;
+                localtime_r(&unix_t, &lt);
+                esp_err_t err = rtc_pcf85063_set_datetime(lt.tm_year + 1900, lt.tm_mon + 1,
+                                                          lt.tm_mday, lt.tm_hour,
+                                                          lt.tm_min, lt.tm_sec);
+                if (err == ESP_OK)
+                    ESP_LOGI(TAG, "Clock set from app: %04d-%02d-%02d %02d:%02d:%02d",
+                             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday,
+                             lt.tm_hour, lt.tm_min, lt.tm_sec);
+                else
+                    ESP_LOGW(TAG, "Clock sync from app failed: %s", esp_err_to_name(err));
+            }
         }
 
         // ---- Status icons: USB applied on every CHANGE (checked each loop
@@ -3820,7 +3932,7 @@ void can_hmi_task(void *arg)
                 time_t tnow = time(NULL);
                 struct tm lt;
                 localtime_r(&tnow, &lt);
-                if (lt.tm_year + 1900 >= 2024) {
+                if (clock_is_set()) {
                     snprintf(clk, sizeof(clk), "%02d:%02d", lt.tm_hour, lt.tm_min);
                 } else {
                     snprintf(clk, sizeof(clk), "--:--");

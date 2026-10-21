@@ -1,0 +1,67 @@
+Variable Name;ENG;DK
+Empty;;
+Shutdown;Shutdown;Sluk
+Select;Select;Vælg
+Return;Return;Tilbage
+MainMenu;Main Menu;Hoved Menu
+OperationStatus;Operation Status;Drift Status
+Power;Power;Effekt
+Voltage;Voltage;Spænding
+Current;Current;Strøm
+Time;Time;Tid
+ACOut;230VAC Output;230VAC Udgang
+DCOut;12VDC Output;12VDC Udgang
+ACIn_Charge;230VAC Charge;230VAC Ladning
+DCIn_Charge;12VDC Charge;12VDC Ladning
+ACIn;230VAC Charging;230VAC Ladning
+DCIn;12VDC Charging;12VDC Ladning
+Jumpstart;Jumpstart;Starthjælp
+ShutdownDelay;Shutdown Delay;Nedlukningsforsinkelse
+MaxCurrent;Maximum Current;Maksimum Strøm
+RemainingOperation;Remaining Operation;Resterende Driftstid
+SOC;Current Capacity;Resterende Kapacitet
+BatteryStatus;Battery Status;Batteriets Status
+Temperature;Temperature;Temperatur
+Cell1Vol;Cell 1;Celle 1
+Cell2Vol;Cell 2;Celle 2
+Cell3Vol;Cell 3;Celle 3
+Cell4Vol;Cell 4;Celle 4
+General;General;Generelt
+Trafo;Transformer;Transformer
+IGBT;IGBT Module;IGBT Modul
+TempCell12;Between Cell 1 and 2;Mellem Celle 1 og 2
+TempCell23;Between Cell 2 and 3;Mellem Celle 2 og 3
+TempCell34;Between Cell 3 and 4;Mellem Celle 3 og 4
+About;About;Om
+Serial;Serial Number;Serienummer
+ManufactureDate;Manufactured;Produceret
+Cycles;Number of Cycles;Antal Op-Afladninger
+HVersion;Hardware Version;Hardware Version
+SVersionDisp;Software Version - Display;Software Version - Skærm
+SVersionUnit;Software Version - Unit;Software Version - Enhed
+English;English;Engelsk
+Danish;Danish;Dansk
+Language;Language;Sprog
+Errors;Error Codes;Fejlkoder
+Error;Error Code:;Fejlkode:
+FL_Critical;Critical Error;Kritisk Fejl
+FL_Warning;Warning;Advarsel
+FL_Simple;Error;Fejl
+FL_Okay;OK;OK
+FL_Empty;Low Battery;Lavt batteri
+OS_Starting;Starting;Starter Op
+OS_Stopping;Shutting Down;Lukker Ned
+OS_Standby;Standby;Dvale
+OS_On;On;On
+OS_Off;Off;Off
+BS_CHARGING;Charging;Lader
+BS_DISCHARGING;Discharging;Aflader
+PowerOption;Power Menu;Power Menu
+PWO_AC_Out;AC Out;AC Ud
+PWO_DC_Out;DC Out;DC Ud
+Auto_PowerDownDelay;Energy Saver (No load);Dvale (Intet forbrug)
+Auto_PowerDownLoad;Energy Saver (Threshold);Dvale (Mindre end)
+ModelType;Model;Model
+Clear;Clear;Nulstil
+OHM_DCIN_AVG;Impedance (Avg);Impedans (Gns.)
+OHM_DCIN;Impedance;Impedans

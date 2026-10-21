@@ -28,6 +28,9 @@ extern "C" {
 #define BLE_CMD_SET_CAN_PASSTHROUGH 0x18  // [enabled:0/1]
 #define BLE_CMD_SEND_CAN_FRAME      0x19  // [can_id_u32_le][dlc][data8]
 #define BLE_CMD_SEND_CAN_FRAMES     0x1A  // [count][can_id_u32_le][dlc][data8]...
+#define BLE_CMD_SYNC_TIME           0x1B  // [year_u16_le][month][day][hour][min][sec][force:0/1]
+                                          // Phone's local time. Applied only while the clock
+                                          // is unset, unless force = 1.
 
 // ---------------------------------------------------------------------------
 //  Public API
@@ -59,6 +62,7 @@ void ble_gateway_set_standby(bool standby);
 // ---------------------------------------------------------------------------
 //  Callback — called from BLE RX to be handled by can_hmi
 // ---------------------------------------------------------------------------
+// A disconnect is also reported, as BLE_CMD_SET_CAN_PASSTHROUGH [0].
 typedef void (*ble_cmd_callback_t)(uint8_t cmd, const uint8_t *payload, uint16_t len);
 void ble_gateway_set_cmd_callback(ble_cmd_callback_t cb);
 

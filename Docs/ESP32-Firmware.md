@@ -137,13 +137,13 @@ Notable options:
 
 ### Broadcast PGN Messages (LPS → HMI)
 
-Each broadcast message has an 8-byte payload. The first byte is the PGN (sub-index), the rest carry the data.
+Broadcasts use the 29-bit ID `0x18FF<pgn><src>` (or `0x14FF…`): the PGN sub-index is ID bits 8–15, the source address bits 0–7, and all 8 payload bytes carry data. Only these IDs (and `0x19FF` identification) create a unit in the table; frames from our own address `0xFE`, the global address `0xFF` or any other ID are ignored. BMS units use a different PGN map (`decode_broadcast_bms`); their pack voltage comes from PGN `0x02`, not the cell sum.
 
 | PGN | Fields |
 |-----|--------|
 | `0x00` | SOC %, battery current, time remaining, DOD |
 | `0x01` | DC input voltage & current, DC output voltage & current |
-| `0x03` | Operating state, failure level, cell count, sensor count |
+| `0x03` | Operating state, failure level |
 | `0x04` | Inverter state/fail, charger state/fail, DC-in state/fail, DC-out state/fail |
 | `0x05` | 8 error codes (bulk) |
 | `0x06` | 3 internal temperatures + cell average temperature |
@@ -170,7 +170,7 @@ Settings use Q16.16 fixed-point format (32-bit, lower 16 bits = fractional part)
 |------|-----------|
 | Voltage | `raw_i32 / 65536.0` → volts |
 | Current | `raw_i32 / 65536.0` → amps |
-| Percentage | `(raw_i32 / 65536.0 / 655.35) * 100` |
+| Percentage | `raw_i32 / 65536.0 * 100` → % (the value is a 0–1 fraction) |
 | Time | `raw_i32 / 65536.0 * 3600` → seconds |
 | Enum | Upper 16 bits contain enum index |
 
@@ -234,7 +234,7 @@ typedef struct {
 
 Settings are accessed via CAN_Extra commands. The HMI sends GET_VAL/SET_VAL with a `block:id` address. Responses are matched asynchronously.
 
-A **staggered request queue** prevents CAN bus flooding: 25 ms spacing between GET_VAL requests when loading a settings page.
+A **staggered request queue** prevents CAN bus flooding: 30 ms spacing (`REQ_SPACING_MS`) between GET_VAL requests when loading a settings page.
 
 ### Settings Menu Structure
 
@@ -326,7 +326,7 @@ Full error code list.
 **Elements:**
 - Scrollable list of active error codes
 - Each entry: error code number, description text, severity color
-- Error descriptions from static lookup table (128 entries)
+- Error descriptions from static lookup table (113 entries)
 
 ### Page 5: Error Popup
 
@@ -375,6 +375,7 @@ See [MobileApp.md](MobileApp.md) for the app side. The firmware side is in `ble_
 | `0x18` | `BLE_CMD_SET_CAN_PASSTHROUGH` | `[enabled]` | Enable or disable CAN forwarding |
 | `0x19` | `BLE_CMD_SEND_CAN_FRAME` | `[can_id_u32_le][dlc][data8]` | Send one CAN frame |
 | `0x1A` | `BLE_CMD_SEND_CAN_FRAMES` | `[count][can_id_u32_le][dlc][data8]...` | Send a batch of CAN frames |
+| `0x1B` | `BLE_CMD_SYNC_TIME` | `[year_u16_le][month][day][hour][min][sec][force]` | Phone's local time. Sets the RTC only while the clock is unset (year < `CLOCK_YEAR_MIN`), unless `force` = 1. Applied in the main loop, not on the BLE thread |
 
 When passthrough is enabled, every received CAN frame is forwarded to the app as `BLE_MSG_CAN_FRAME`. The firmware still decodes CAN frames for the local LCD UI, but it no longer emits ESP32-generated dashboard/settings/unit/error BLE packets.
 
@@ -450,13 +451,14 @@ Each discovered unit tracks:
 | Event | Timeout | Action |
 |-------|---------|--------|
 | Broadcast received | — | Mark unit ONLINE, update data |
-| No broadcast | 5 seconds | Mark unit OFFLINE (grayed out in UI) |
+| No broadcast | 3 seconds | Mark unit OFFLINE (grayed out in UI) |
 | No broadcast | 60 seconds | FREE slot (remove from table) |
 
 ### Device Identification
 
 On first appearance, the HMI sends a J1939 Request PGN (`0x18EA`) to the unit.  
 The unit responds with part number, serial, firmware version.  
+The unit is classified (LPS/BMS) only once both part-number frames (`0x19FF03` and `0x19FF04`) have arrived.  
 If no response within timeout, the HMI retries automatically.
 
 ### Active Unit Selection

@@ -30,12 +30,29 @@ bool rtc_pcf85063_get_time(struct tm *out);
 /** Write the RTC (also clears the lost-integrity flag). */
 esp_err_t rtc_pcf85063_set_time(const struct tm *t);
 
+/** Days in a month (1-12) of a Gregorian year; 0 for an invalid month. */
+int rtc_days_in_month(int year, int month);
+
 /**
- * Set RTC AND system clock from broken-down local time.
- * Convenience used by the debug-port TS command.
+ * Set RTC AND system clock from broken-down local time. Rejects impossible
+ * dates (e.g. 31 Feb) with ESP_ERR_INVALID_ARG.
  */
 esp_err_t rtc_pcf85063_set_datetime(int year, int month, int day,
                                     int hour, int min, int sec);
+
+/**
+ * CLKOUT pin control. On the Clayton "New Display" PCB the RTC's CLKOUT
+ * drives the buzzer, so the tone is made by enabling a 4096 Hz square wave
+ * and gating it with the expander's BUZZ_ON bit. Off = COF disabled (also
+ * the recommended idle state — the power-on default is 32768 Hz).
+ */
+esp_err_t rtc_pcf85063_clkout_enable(bool on);
+
+/**
+ * CLKOUT at a specific frequency: 1024, 2048, 4096, 8192, 16384 or 32768 Hz;
+ * 0 = off. Other values return ESP_ERR_INVALID_ARG.
+ */
+esp_err_t rtc_pcf85063_clkout_set_hz(uint32_t hz);
 
 #ifdef __cplusplus
 }

@@ -43,9 +43,10 @@ static const ble_uuid128_t rx_chr_uuid =
 // ---------------------------------------------------------------------------
 //  State
 // ---------------------------------------------------------------------------
-static uint16_t conn_handle = BLE_HS_CONN_HANDLE_NONE;
+// Written by the NimBLE host task, read by the HMI task.
+static volatile uint16_t conn_handle = BLE_HS_CONN_HANDLE_NONE;
 static uint16_t tx_attr_handle;
-static bool     client_subscribed = false;
+static volatile bool     client_subscribed = false;
 static uint32_t passkey = 0;
 static ble_cmd_callback_t cmd_callback = NULL;
 static ble_pairing_callback_t pairing_callback = NULL;
@@ -172,6 +173,11 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "BLE disconnected reason=%d", event->disconnect.reason);
         conn_handle = BLE_HS_CONN_HANDLE_NONE;
         client_subscribed = false;
+        // The next client starts without passthrough until it asks for it.
+        if (cmd_callback) {
+            const uint8_t off = 0;
+            cmd_callback(BLE_CMD_SET_CAN_PASSTHROUGH, &off, 1);
+        }
         start_advertise();
         break;
 
@@ -302,6 +308,9 @@ static void on_reset(int reason)
 {
     ESP_LOGW(TAG, "NimBLE reset reason=%d", reason);
     ble_ready = false;
+    // A host reset drops the link without a DISCONNECT event.
+    conn_handle = BLE_HS_CONN_HANDLE_NONE;
+    client_subscribed = false;
 }
 
 static void nimble_host_task(void *param)

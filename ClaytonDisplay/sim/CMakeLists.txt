@@ -1,7 +1,7 @@
 # Clayton Power HMI - LVGL 8.4 PC Simulator (SDL2)
 #
 # Reuses the project's own LVGL 8.4 source (managed_components) and the real
-# ui_theme.c from ../main, so what you see here matches the ESP32-S3 1:1.
+# dashboard_carbon.c from ../main, so what you see here matches the ESP32-S3 1:1.
 #
 # Build (from this folder), using the MSYS2 ucrt64 toolchain:
 #   cmake -G Ninja -B build .
@@ -28,8 +28,7 @@ set(SIM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/sdl_driver.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/ui_demo.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/ui_doc.c"
-    "${REPO_MAIN}/dashboard_ui.c"      # the REAL dashboard, shared with firmware
-    "${REPO_MAIN}/dashboard_carbon.c"  # Carbon Blue skin (UI_SKIN_CARBON in ui_screen.h)
+    "${REPO_MAIN}/dashboard_carbon.c"  # the REAL dashboard (Carbon Blue), shared with firmware
     "${REPO_MAIN}/icons_carbon.c"      # Carbon pictograms (generated)
     "${REPO_MAIN}/fonts/cb_font_84.c"
     "${REPO_MAIN}/fonts/cb_font_42.c"
@@ -46,7 +45,7 @@ target_compile_definitions(clayton_sim PRIVATE LV_CONF_INCLUDE_SIMPLE LV_LVGL_H_
 
 target_include_directories(clayton_sim PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"      # lv_conf.h, sdl_driver.h
-    "${REPO_MAIN}"                     # ui_theme.h
+    "${REPO_MAIN}"                     # dashboard_ui.h, ui_screen.h, ui_palette.h
     "${LVGL_DIR}"                      # lvgl.h
 )
 

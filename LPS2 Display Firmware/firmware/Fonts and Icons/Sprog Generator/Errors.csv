@@ -1,0 +1,235 @@
+Variable Name;ENG
+Title_E001;EEPROM
+Title_E002;EEPROM
+Title_E003;High Voltage
+Title_E004;Temperature
+Title_E005;Temperature
+Title_E006;Temperature
+Title_E007;Temperature
+Title_E008;Broken Sensor
+Title_E009;Broken Sensor
+Title_E010;Efficiency 
+Title_E011;IO Overload
+Title_E012;IO Overload
+Title_E013;IO Overload
+Title_E014;IO Overload
+Title_E020;230 VAC Overload
+Title_E022;Charger
+Title_E023;Charger
+Title_E030;Calibration
+Title_E031;Calibration
+Title_E032;Calibration
+Title_E033;Calibration
+Title_E034;Calibration
+Title_E035;Calibration
+Title_E036;Calibration
+Title_E037;Calibration
+Title_E038;Calibration
+Title_E039;Calibration
+Title_E040;Calibration
+Title_E041;Calibration
+Title_E042;Calibration
+Title_E043;Calibration
+Title_E044;Calibration
+Title_E045;Calibration
+Title_E046;Calibration
+Title_E047;Calibration
+Title_E048;Calibration
+Title_E050;Empty Battery
+Title_E051;Empty Battery
+Title_E052;Low Battery
+Title_E053;Empty Battery
+Title_E054;Balancing
+Title_E055;Balancing
+Title_E056;Temperature
+Title_E057;Temperature
+Title_E058;Temperature
+Title_E059;Temperature
+Title_E060;Empty Battery
+Title_E061;Battery Discharge Current
+Title_E062;Battery Charge Current
+Title_E070;Solar
+Title_E071;Solar
+Title_E072;Solar
+Title_E073;Solar Fuse
+Title_E074;Solar
+Title_E075;Solar Self Protect
+Title_E088;12 VDC Out Overload
+Title_E090;Low DC Input
+Title_E091;High DC Input
+Title_E092;DC Input Overload
+Title_E093;DC Input Failure
+Title_E094;12 VDC Out Relay
+Title_E095;12 VDC Out Relay
+Title_E096;12 VDC Out Overcharge
+Title_E097;12 VDC Out Overload
+Title_E098;DC Input Fuse Blown
+Title_E099;DC-DC to Batt. Fuse Blown
+Title_E101;AC Offset
+Title_E102;DC Offset
+Title_E105;High Voltage
+Title_E120;DC Input Failure
+Title_E121;CAN Failure
+Title_E122;Temperature
+Title_E123;Temperature
+Title_E124;High DC Input
+Title_E125;High DC Input
+Title_E126;DC Input Overload
+Title_E127;DC Input Overload
+Title_E130;Power Supply
+Title_E131;Power Supply
+Title_E132;Power Supply
+Title_E133;Power Supply
+Title_E135;Power Supply
+Title_E136;Power Supply
+Title_E137;Power Supply
+Title_E138;Power Supply
+Title_E139;Power Supply
+Title_E140;Power Supply
+Title_E141;Power Supply
+Title_E142;Power Supply
+Title_E150;230 VAC Overload
+Title_E151;230 VAC Overload
+Title_E152;230 VAC Overload
+Title_E153;PE/N Relay
+Title_E154;PE/N Relay
+Title_E155;230 VAC Overload
+Title_E157;Inverter Cut-Off
+Title_E200;230 VAC In Peak
+Title_E201;230 VAC In Peak
+Title_E202;High Voltage
+Title_E203;230 VAC Overload
+Title_E204;Transfer Relay
+Title_E205;Transfer Relay
+Title_E206;230 VAC In Low
+Title_E207;230 VAC In High
+Title_E208;AC Input
+Title_E220;System AC Input
+Title_E221;System AC Output
+Title_E222;System DC Input
+Title_E223;Communication
+Title_E240;System Locked
+Title_E241;System Locked
+Title_E242;System Locked
+Title_E243;System Locked
+Title_E244;System Locked
+Title_E245;System Locked
+Title_E246;System Locked
+Title_E247;System Locked
+Description_E001;Contact your retailer for support.
+Description_E002;Contact your retailer for support.
+Description_E003;Contact your retailer for support.
+Description_E004;Unit is getting too cold. Allow it to warm up or place it in higher ambient temperature.
+Description_E005;Unit is too cold. Allow it to warm up or place it in higher ambient temperature.
+Description_E006;Unit is getting too hot. Allow it to cool down or place it in a lower ambient temperature.
+Description_E007;Unit is too hot. Allow it to cool down or place it in a lower ambient temperature.
+Description_E008;Contact your retailer for support.
+Description_E009;Contact your retailer for support.
+Description_E010;Contact your retailer for support.
+Description_E011;Disconnect IO (REMOTE) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support.
+Description_E012;Disconnect IO (DATA) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support.
+Description_E013;Disconnect IO (FRONT) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support.
+Description_E014;Disconnect IO (C2) connector and check for connector or cable damage. If that does not remove the failure, then contact your retailer for support.
+Description_E020;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, then contact your retailer for support.
+Description_E022;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, then contact your retailer for support.
+Description_E023;Remove 230 VAC connections and reconnect to continue charging. If a restart does not remove the failure, then contact your retailer for support.
+Description_E030;Contact your retailer for support.
+Description_E031;Contact your retailer for support.
+Description_E032;Contact your retailer for support.
+Description_E033;Contact your retailer for support.
+Description_E034;Contact your retailer for support.
+Description_E035;Contact your retailer for support.
+Description_E036;Contact your retailer for support.
+Description_E037;Contact your retailer for support.
+Description_E038;Contact your retailer for support.
+Description_E039;Contact your retailer for support.
+Description_E040;Contact your retailer for support.
+Description_E041;Contact your retailer for support.
+Description_E042;Contact your retailer for support.
+Description_E043;Contact your retailer for support.
+Description_E044;Contact your retailer for support.
+Description_E045;Contact your retailer for support.
+Description_E046;Contact your retailer for support.
+Description_E047;Contact your retailer for support.
+Description_E048;Contact your retailer for support.
+Description_E050;Battery is deep-discharged. Contact your retailer for support.
+Description_E051;Battery is empty. Charge the unit.
+Description_E052;Battery is low. Charge the unit.
+Description_E053;Battery is empty. Charge the unit.
+Description_E054;Cell balancing in progress. If warning remains after 24 hrs, contact your retailer for support.
+Description_E055;Cell balancing in progress. If failure remains after 24 hrs, contact your retailer for support.
+Description_E056;Unit is getting too cold. Allow it to warm up or place it in higher ambient temperature.
+Description_E057;Unit is too cold. Allow it to warm up or place it in higher ambient temperature.
+Description_E058;Unit is getting too hot. Allow it to cool down or place it in a lower ambient temperature.
+Description_E059;Unit is too hot. Allow it to cool down or place it in a lower ambient temperature.
+Description_E060;Battery is empty. Charge the unit.
+Description_E061;Battery is being discharged with too high current. Remove any 230 VAC and 12 VDC load. If that does not remove the failure, then contact your retailer for support.
+Description_E062;Battery is being charged with too high current.  Disconnect all charge sources (Solar, DC, AC). If that does not remove the failure, then contact your retailer for support.
+Description_E070;Check for correct solar installation and a voltage of maximum 50 V from solar panel.
+Description_E071;Check for correct solar installation and max current from solar panel.
+Description_E072;Contact your retailer for support.
+Description_E073;Contact your retailer for support.
+Description_E074;Contact your retailer for support.
+Description_E075;Contact your retailer for support.
+Description_E088;12 VDC Output overloaded. Remove load to avoid shutdown.
+Description_E090;DC Input voltage too low for charging. Check vehicle battery voltage.
+Description_E091;DC Input voltage too high for charging. Check vehicle battery voltage.
+Description_E092;DC Input overloaded. Contact your retailer for support.
+Description_E093;Unable to charge from vehicle, check installation to vehicle battery. If that does not remove the failure, then contact your retailer for support.
+Description_E094;Contact your retailer for support.
+Description_E095;Contact your retailer for support.
+Description_E096;12 VDC output charge current too high. Check vehicle installation.
+Description_E097;Remove 12 VDC load and press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E098;The internal DC input fuse has blown. Contact your retailer for support.
+Description_E099;The internal DC-DC converter to battery fuse has blown. Contact your retailer for support.
+Description_E101;Contact your retailer for support.
+Description_E102;Contact your retailer for support.
+Description_E105;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E120;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E121;Check CAN cables. If that does not remove the failure, then contact your retailer for support.
+Description_E122;Unit is getting too hot. Allow it to cool down or place it in a lower ambient temperature.
+Description_E123;Unit is too hot. Allow it to cool down or place it in a lower ambient temperature.
+Description_E124;DC Input voltage too high for charging. Check the vehicle installation.
+Description_E125;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E126;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E127;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E130;Contact your retailer for support.
+Description_E131;Contact your retailer for support.
+Description_E132;Contact your retailer for support.
+Description_E133;Contact your retailer for support.
+Description_E135;Contact your retailer for support.
+Description_E136;Contact your retailer for support.
+Description_E137;Contact your retailer for support.
+Description_E138;Contact your retailer for support.
+Description_E139;Contact your retailer for support.
+Description_E140;Contact your retailer for support.
+Description_E141;Contact your retailer for support.
+Description_E142;Contact your retailer for support.
+Description_E150;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E151;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E152;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E153;Contact your retailer for support.
+Description_E154;Contact your retailer for support.
+Description_E155;Remove 230 VAC load and press < CLEAR > to restart unit. If a restart does not remove the failure, then contact your retailer for support.
+Description_E157;Battery SOC below cut-off limit. Charge unit or decrease limit.
+Description_E200;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E201;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E202;Press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E203;Remove 230 VAC load and press < OK > to restart unit. If a restart does not remove the failure, contact your retailer for support.
+Description_E204;Contact your retailer for support.
+Description_E205;Contact your retailer for support.
+Description_E206;230 VAC IN voltage too low. Check supply cables, remove extension cord or try another outlet socket. If that does not remove the failure, then contact your retailer for support.
+Description_E207;230 VAC IN voltage too high. Check mains supply.
+Description_E208;Contact your retailer for support.
+Description_E220;Contact your retailer for support.
+Description_E221;Contact your retailer for support.
+Description_E222;Contact your retailer for support.
+Description_E223;Check CAN cables. If that does not remove the failure, then contact your retailer for support.
+Description_E240;Cell voltage critically low, unit locked. Contact your retailer for support.
+Description_E241;Cell voltage critically high, unit locked. Contact your retailer for support.
+Description_E242;Battery voltage critically low, unit locked. Contact your retailer for support.
+Description_E243;Battery voltage critically high, unit locked. Contact your retailer for support.
+Description_E244;Temperature critically low, unit locked. Contact your retailer for support.
+Description_E245;Temperature critically high, unit locked. Contact your retailer for support.
+Description_E246;Charge current critically high, unit locked. Contact your retailer for support.
+Description_E247;Discharge current critically high, unit locked. Contact your retailer for support.

@@ -1,15 +1,13 @@
 /**
  * main.c — Entry point for CAN HMI on ESP32-S3-Touch-LCD-5
  *
- * Initializes the RGB LCD, touch, LVGL, TWAI CAN bus, and launches the HMI task.
+ * Brings up the RGB LCD, touch, LVGL, RTC and USB, starts the CAN bus via
+ * can_hmi, builds the UI and launches the HMI task.
  */
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#define CONFIG_TWAI_SUPPRESS_DEPRECATE_WARN 1
-#include "driver/twai.h"
 #include "esp_log.h"
-#include "esp_sleep.h"
 #include "esp_system.h"
 
 #include <sys/time.h>
@@ -23,10 +21,7 @@ static const char *TAG = "main";
 
 void app_main(void)
 {
-    if (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_EXT0))
-        ESP_LOGI(TAG, "=== Wake from deep sleep (CAN activity) ===");
-    else
-        ESP_LOGI(TAG, "=== Clayton Power CAN HMI (cold boot) ===");
+    ESP_LOGI(TAG, "=== Clayton Power CAN HMI ===");
     // 1=POWERON 3=SW 4=PANIC 5=INT_WDT 6=TASK_WDT 7=OTHER_WDT 9=BROWNOUT
     ESP_LOGW(TAG, "Reset reason: %d", (int)esp_reset_reason());
     ESP_LOGI(TAG, "Display: ESP32-S3-Touch-LCD-5 (%dx%d)", SCREEN_W, SCREEN_H);
@@ -68,11 +63,11 @@ void app_main(void)
                  CONFIG_EXAMPLE_TX_GPIO_NUM, CONFIG_EXAMPLE_RX_GPIO_NUM);
     }
 
-    // Create HMI UI (must be done under LVGL lock)
-    if (lvgl_port_lock(1000)) {
-        can_hmi_init();
-        lvgl_port_unlock();
-    }
+    // Create HMI UI (must be done under LVGL lock). The HMI task relies on
+    // these objects, so wait for the lock rather than skipping the UI.
+    lvgl_port_lock(-1);
+    can_hmi_init();
+    lvgl_port_unlock();
 
     // Launch CAN HMI task. 16 KB stack: the standby wake path runs the whole
     // TinyUSB (re)install inside this task's deepest call chain.

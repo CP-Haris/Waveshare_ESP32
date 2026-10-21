@@ -1,7 +1,7 @@
 // Shared unit-type helpers.
 // Classification mirrors the ESP32 firmware: part numbers starting with
 // "CL" are LPS units, "CB" are BMS/battery units; the numeric type from
-// canGatewayService (1 = LPS, 2 = BMS) is the fallback when no part number
+// display driver (1 = LPS, 2 = BMS) is the fallback when no part number
 // has been received yet.
 
 export const DEV_UNKNOWN = 0;
